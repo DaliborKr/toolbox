@@ -51,6 +51,8 @@ setup_suite() {
     # Cache all images that will be needed during the tests
     _pull_and_cache_distro_image fedora 34 || false
     _pull_and_cache_distro_image rhel 8.10 || false
+
+    _pull_and_cache_distro_image fedora 42-aarch64 || false
   fi
 
   if echo "$TOOLBX_TEST_SYSTEM_TAGS" | grep "ubuntu" >/dev/null 2>/dev/null; then
