@@ -222,7 +222,9 @@ func runCommand(container string,
 				return nil
 			}
 
-			if err := createContainer(container, image, release, "", false); err != nil {
+			// TODO: What logic should be used to determine the arch?
+			// 		Temporarily using empty string to match existing behavior.
+			if err := createContainer(container, image, release, "", "", false); err != nil {
 				return err
 			}
 		} else if containersCount == 1 && defaultContainer {

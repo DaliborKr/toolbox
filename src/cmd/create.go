@@ -49,6 +49,7 @@ const (
 
 var (
 	createFlags struct {
+		arch      string
 		authFile  string
 		container string
 		distro    string
@@ -74,6 +75,12 @@ var createCmd = &cobra.Command{
 
 func init() {
 	flags := createCmd.Flags()
+
+	flags.StringVarP(&createFlags.arch,
+		"arch",
+		"a",
+		"",
+		"Create a Toolbx container for a different architecture than the host")
 
 	flags.StringVar(&createFlags.authFile,
 		"authfile",
@@ -170,6 +177,14 @@ func create(cmd *cobra.Command, args []string) error {
 		containerArg = "--container"
 	}
 
+	// TODO: implement getting the default arch and vericatition of specified arch within the argument --arch
+	//		 Could be done with ```podman info --format '{{.Host.Arch}}'```
+	// if arch == "" {
+	// 	arch = utils.GetDefaultArch()
+	// }
+
+	arch := createFlags.arch
+
 	container, image, release, err := resolveContainerAndImageNames(container,
 		containerArg,
 		createFlags.distro,
@@ -180,14 +195,14 @@ func create(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := createContainer(container, image, release, createFlags.authFile, true); err != nil {
+	if err := createContainer(container, image, release, arch, createFlags.authFile, true); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func createContainer(container, image, release, authFile string, showCommandToEnter bool) error {
+func createContainer(container, image, release, arch, authFile string, showCommandToEnter bool) error {
 	if container == "" {
 		panic("container not specified")
 	}
@@ -412,6 +427,7 @@ func createContainer(container, image, release, authFile string, showCommandToEn
 	entryPoint := []string{
 		"toolbox", "--log-level", "debug",
 		"init-container",
+		"--arch", arch,
 		"--gid", currentUser.Gid,
 		"--home", currentUserHomeDir,
 		"--shell", userShell,
@@ -444,6 +460,12 @@ func createContainer(container, image, release, authFile string, showCommandToEn
 		"--ipc", "host",
 		"--label", "com.github.containers.toolbox=true",
 	}...)
+
+	if arch != "" {
+		createArgs = append(createArgs, []string{
+			"--label", "toolbox-arch=" + arch,
+		}...)
+	}
 
 	createArgs = append(createArgs, devPtsMount...)
 
