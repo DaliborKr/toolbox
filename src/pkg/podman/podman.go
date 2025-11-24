@@ -188,6 +188,29 @@ func GetContainers(args ...string) (*Containers, error) {
 	return &Containers{containers, 0}, nil
 }
 
+// func GetHostArch() (int, error) {
+// 	var stdout bytes.Buffer
+
+// 	//TODO: Use the 'uname -m' command to get the host arch instead of using Podman?
+// 	//TODO: Create info interface??
+
+// 	logLevelString := LogLevel.String()
+// 	args := []string{"--log-level", logLevelString, "info", "--format", "{{.Host.Arch}}"}
+
+// 	if err := shell.Run("podman", nil, &stdout, nil, args...); err != nil {
+// 		return utils.NotSpecifiedArchID, err
+// 	}
+
+// 	arch := strings.TrimSpace(stdout.String())
+// 	logrus.Debugf("Host architecture: %s", arch)
+// 	archID, err := utils.ParseArgArchValue(arch)
+// 	if err != nil {
+// 		return utils.NotSpecifiedArchID, err
+// 	}
+
+// 	return archID, nil
+// }
+
 // GetImages is a wrapper function around `podman images --format json` command.
 //
 // Parameter args accepts an array of strings to be passed to the wrapped command (eg. ["-a", "--filter", "123"]).
@@ -395,12 +418,16 @@ func LogsContext(ctx context.Context, container string, follow bool, since time.
 //
 // authfile is a path to a JSON authentication file and is internally used only
 // if it is not an empty string.
-func Pull(imageName string, authfile string) error {
+func Pull(imageName string, authfile string, archID int) error {
 	logLevelString := LogLevel.String()
 	args := []string{"--log-level", logLevelString, "pull"}
 
 	if authfile != "" {
 		args = append(args, []string{"--authfile", authfile}...)
+	}
+
+	if archID != utils.NotSpecifiedArchID {
+		args = append(args, []string{"--arch", utils.GetArchName(archID)}...)
 	}
 
 	args = append(args, imageName)

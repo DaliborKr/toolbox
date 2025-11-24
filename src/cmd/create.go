@@ -177,13 +177,21 @@ func create(cmd *cobra.Command, args []string) error {
 		containerArg = "--container"
 	}
 
+	arch := createFlags.arch
+
 	// TODO: implement getting the default arch and vericatition of specified arch within the argument --arch
 	//		 Could be done with ```podman info --format '{{.Host.Arch}}'```
-	// if arch == "" {
-	// 	arch = utils.GetDefaultArch()
-	// }
 
-	arch := createFlags.arch
+	var archID int
+	if arch == "" {
+		archID = utils.HostArchID
+	} else {
+		archIDParsed, err := utils.ParseArgArchValue(arch)
+		if err != nil {
+			return err
+		}
+		archID = archIDParsed
+	}
 
 	container, image, release, err := resolveContainerAndImageNames(container,
 		containerArg,
@@ -195,14 +203,14 @@ func create(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := createContainer(container, image, release, arch, createFlags.authFile, true); err != nil {
+	if err := createContainer(container, image, release, createFlags.authFile, archID, true); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func createContainer(container, image, release, arch, authFile string, showCommandToEnter bool) error {
+func createContainer(container, image, release, authFile string, archID int, showCommandToEnter bool) error {
 	if container == "" {
 		panic("container not specified")
 	}
@@ -229,7 +237,7 @@ func createContainer(container, image, release, arch, authFile string, showComma
 		return errors.New(errMsg)
 	}
 
-	pulled, err := pullImage(image, release, authFile)
+	pulled, err := pullImage(image, release, authFile, archID)
 	if err != nil {
 		return err
 	}
@@ -427,7 +435,7 @@ func createContainer(container, image, release, arch, authFile string, showComma
 	entryPoint := []string{
 		"toolbox", "--log-level", "debug",
 		"init-container",
-		"--arch", arch,
+		"--arch", fmt.Sprintf("%d", archID),
 		"--gid", currentUser.Gid,
 		"--home", currentUserHomeDir,
 		"--shell", userShell,
@@ -461,11 +469,9 @@ func createContainer(container, image, release, arch, authFile string, showComma
 		"--label", "com.github.containers.toolbox=true",
 	}...)
 
-	if arch != "" {
-		createArgs = append(createArgs, []string{
-			"--label", "toolbox-arch=" + arch,
-		}...)
-	}
+	createArgs = append(createArgs, []string{
+		"--label", "toolbox-arch=" + utils.GetArchName(archID),
+	}...)
 
 	createArgs = append(createArgs, devPtsMount...)
 
@@ -686,7 +692,7 @@ func getServiceSocket(serviceName string, unitName string) (string, error) {
 	return "", fmt.Errorf("failed to find a SOCK_STREAM socket for %s", unitName)
 }
 
-func pullImage(image, release, authFile string) (bool, error) {
+func pullImage(image, release, authFile string, archID int) (bool, error) {
 	if ok := utils.ImageReferenceCanBeID(image); ok {
 		logrus.Debugf("Looking up image %s", image)
 		if _, err := podman.ImageExists(image); err == nil {
@@ -763,7 +769,7 @@ func pullImage(image, release, authFile string) (bool, error) {
 		defer s.Stop()
 	}
 
-	if err := podman.Pull(imageFull, authFile); err != nil {
+	if err := podman.Pull(imageFull, authFile, archID); err != nil {
 		var builder strings.Builder
 		fmt.Fprintf(&builder, "failed to pull image %s\n", imageFull)
 		fmt.Fprintf(&builder, "If it was a private image, log in with: podman login %s\n", domain)

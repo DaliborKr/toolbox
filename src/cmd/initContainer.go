@@ -17,7 +17,6 @@
 package cmd
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -29,6 +28,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/containers/toolbox/pkg/binfmt_misc"
 	"github.com/containers/toolbox/pkg/shell"
 	"github.com/containers/toolbox/pkg/utils"
 	"github.com/fsnotify/fsnotify"
@@ -42,7 +42,7 @@ import (
 
 var (
 	initContainerFlags struct {
-		arch        string
+		archID      int
 		gid         int
 		home        string
 		homeLink    bool
@@ -87,9 +87,9 @@ var initContainerCmd = &cobra.Command{
 func init() {
 	flags := initContainerCmd.Flags()
 
-	flags.StringVar(&initContainerFlags.arch,
+	flags.IntVar(&initContainerFlags.archID,
 		"arch",
-		"",
+		utils.HostArchID,
 		"Create a Toolbx container for a different architecture than the host")
 
 	flags.IntVar(&initContainerFlags.gid,
@@ -255,14 +255,19 @@ func initContainer(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if initContainerFlags.arch != "" {
-		logrus.Debugf("Mounting binfmt_misc file system in container for architecture %s", initContainerFlags.arch)
-		if err := mountBinfmtMisc(); err != nil {
+	//TODO: ??
+	if initContainerFlags.archID == utils.NotSpecifiedArchID {
+		return errors.New("architecture is not specified in the container")
+	}
+
+	if initContainerFlags.archID != utils.HostArchID {
+		logrus.Debugf("Mounting binfmt_misc file system in container for architecture %s", utils.GetArchName(initContainerFlags.archID))
+		if err := binfmt_misc.MountBinfmtMisc(); err != nil {
 			return err
 		}
 
-		logrus.Debugf("Registering QEMU emulato for architecture %s in binfmt_mist", initContainerFlags.arch)
-		if err := registerBinfmtMisc(initContainerFlags.arch); err != nil {
+		logrus.Debugf("Registering QEMU emulator for architecture %s in binfmt_mist", utils.GetArchName(initContainerFlags.archID))
+		if err := binfmt_misc.RegisterBinfmtMisc(initContainerFlags.archID); err != nil {
 			return err
 		}
 	}
@@ -1063,24 +1068,24 @@ func mountBind(containerPath, source, flags string) error {
 	return nil
 }
 
-func mountBinfmtMisc() error {
-	args := []string{
-		"binfmt_misc",
-		"-t",
-		"binfmt_misc",
-		"/proc/sys/fs/binfmt_misc",
-	}
+// func mountBinfmtMisc() error {
+// 	args := []string{
+// 		"binfmt_misc",
+// 		"-t",
+// 		"binfmt_misc",
+// 		"/proc/sys/fs/binfmt_misc",
+// 	}
 
-	var stdout bytes.Buffer
+// 	var stdout bytes.Buffer
 
-	if err := shell.Run("mount", nil, &stdout, nil, args...); err != nil {
-		return fmt.Errorf("failed to mount binfmt_misc: %w", err)
-	}
+// 	if err := shell.Run("mount", nil, &stdout, nil, args...); err != nil {
+// 		return fmt.Errorf("failed to mount binfmt_misc: %w", err)
+// 	}
 
-	logrus.Debugf("Result of mount command: %s", stdout.String())
+// 	logrus.Debugf("Result of mount command: %s", stdout.String())
 
-	return nil
-}
+// 	return nil
+// }
 
 // redirectPath serves for creating symbolic links for crucial system
 // configuration files to their counterparts on the host's file system.
@@ -1148,50 +1153,54 @@ func redirectPath(containerPath, target string, folder bool) error {
 	return nil
 }
 
-func registerBinfmtMisc(arch string) error {
-	// data := ":qemu-aarch64:M:0:\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\xb7\x00:\xff\xff\xff\xff\xff\xff\xff\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/run/host/usr/bin/qemu-aarch64-static:FC"
-
-	name := fmt.Sprintf("qemu-%s", arch)
-	magicType := "M" // Magic
-	offset := "0"
-	interpreter := fmt.Sprintf("/run/host/usr/bin/qemu-%s-static", arch)
-	flags := "FC"
-
-	magic := "\\x7f\\x45\\x4c\\x46\\x02\\x01\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x02\\x00\\xb7\\x00"
-	mask := "\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\x00\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xfe\\xff\\xff\\xff"
-
-	data := fmt.Sprintf(":%s:%s:%s:%s:%s:%s:%s",
-		name, magicType, offset, magic, mask, interpreter, flags)
-
-	fmt.Println("Writing this string to register:", data)
-
-	err := os.WriteFile("/proc/sys/fs/binfmt_misc/register", []byte(data), 0200)
-	if err != nil {
-		return fmt.Errorf("failed to register binfmt_misc handler: %w", err)
-	}
-
-	dataFile, err := os.ReadFile(fmt.Sprintf("/proc/sys/fs/binfmt_misc/%s", name))
-	if err != nil {
-		return fmt.Errorf("failed to read file /proc/sys/fs/binfmt_misc/%s: %w", name, err)
-	}
-
-	logrus.Debugf("File content: %s", string(dataFile))
-
-	return nil
-}
-
 // func registerBinfmtMisc(arch string) error {
-// 	// Try to read existing registration from the host
-// 	reg, err := binfmt_misc.GetRegistration(arch)
-// 	if err != nil {
-// 		logrus.Debugf("Could not read existing binfmt_misc registration: %s", err)
-// 		logrus.Debug("Using hardcoded values as fallback")
+// 	// data := ":qemu-aarch64:M:0:\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\xb7\x00:\xff\xff\xff\xff\xff\xff\xff\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/run/host/usr/bin/qemu-aarch64-static:FC"
 
-// 		// Fallback to hardcoded values
-// 		reg = binfmt_misc.GetHardcodedRegistration(arch)
-// 		if reg == nil {
-// 			return fmt.Errorf("no hardcoded registration available for architecture %s", arch)
-// 		}
+// 	name := fmt.Sprintf("qemu-%s", arch)
+// 	magicType := "M" // Magic
+// 	offset := "0"
+// 	interpreter := fmt.Sprintf("/run/host/usr/bin/qemu-%s-static", arch)
+// 	flags := "FC"
+
+// 	magic := "\\x7f\\x45\\x4c\\x46\\x02\\x01\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x02\\x00\\xb7\\x00"
+// 	mask := "\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\x00\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xfe\\xff\\xff\\xff"
+
+// 	data := fmt.Sprintf(":%s:%s:%s:%s:%s:%s:%s",
+// 		name, magicType, offset, magic, mask, interpreter, flags)
+
+// 	fmt.Println("Writing this string to register:", data)
+
+// 	err := os.WriteFile("/proc/sys/fs/binfmt_misc/register", []byte(data), 0200)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to register binfmt_misc handler: %w", err)
+// 	}
+
+// 	dataFile, err := os.ReadFile(fmt.Sprintf("/proc/sys/fs/binfmt_misc/%s", name))
+// 	if err != nil {
+// 		return fmt.Errorf("failed to read file /proc/sys/fs/binfmt_misc/%s: %w", name, err)
+// 	}
+
+// 	logrus.Debugf("File content: %s", string(dataFile))
+
+// 	return nil
+// }
+
+// func registerBinfmtMisc(archID int) error {
+// 	reg := binfmt_misc.GetHardcodedRegistration(archID)
+// 	if reg == nil {
+// 		logrus.Debugf("Could not find binfmt_misc registration for: %s", utils.GetArchName(archID))
+// 		return fmt.Errorf("no hardcoded registration available for architecture %s", utils.GetArchName(archID))
+
+// 		// TODO: Fallback to parsing the values from the host registration file??
+// 		//			How to provide the path to the host registration file??
+
+// 		//logrus.Debug("Trying to read registration from the host file system as fallback")
+// 		//
+// 		// Fallback to parsing the values from the host registration file
+// 		// reg, err := binfmt_misc.GetRegistration(archID)
+// 		// if err != nil {
+// 		// 	return fmt.Errorf("no hardcoded registration available for architecture %s", arch)
+// 		// }
 // 	}
 
 // 	reg.FixInterpreterPath()

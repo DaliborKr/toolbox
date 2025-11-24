@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 
@@ -373,6 +374,12 @@ func setUpGlobals() error {
 		return fmt.Errorf("failed to get the working directory: %w", err)
 	}
 
+	utils.HostArchID, err = utils.ParseArgArchValue(runtime.GOARCH)
+	if err != nil {
+		return fmt.Errorf("failed to parse host architecture: %w", err)
+	}
+
+	logrus.Debugf("Host architecture: %s", utils.GetArchName(utils.HostArchID))
 	return nil
 }
 

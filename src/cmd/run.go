@@ -223,8 +223,8 @@ func runCommand(container string,
 			}
 
 			// TODO: What logic should be used to determine the arch?
-			// 		Temporarily using empty string to match existing behavior.
-			if err := createContainer(container, image, release, "", "", false); err != nil {
+			// 		Temporarily using HostArchID to match existing behavior.
+			if err := createContainer(container, image, release, "", utils.HostArchID, false); err != nil {
 				return err
 			}
 		} else if containersCount == 1 && defaultContainer {
