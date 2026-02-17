@@ -21,7 +21,11 @@ import (
 	"context"
 	"encoding/json"
 
+	"os"
+
+	"github.com/containers/toolbox/pkg/architecture"
 	"github.com/containers/toolbox/pkg/shell"
+	"github.com/sirupsen/logrus"
 )
 
 type Layer struct {
@@ -48,4 +52,23 @@ func Inspect(ctx context.Context, target string) (*Image, error) {
 	}
 
 	return &image, nil
+}
+
+func CopyOverrideArch(source string, archID int) error {
+
+	destination := "containers-storage:" + source + "-" + architecture.GetArchName(archID)
+	sourceWithTransport := "docker://" + source
+	args := []string{"copy", "--override-arch", architecture.GetArchName(archID), sourceWithTransport, destination}
+
+	if logrus.GetLevel() < logrus.DebugLevel {
+		if err := shell.Run("skopeo", nil, nil, nil, args...); err != nil {
+			return err
+		}
+	} else {
+		if err := shell.Run("skopeo", nil, os.Stderr, nil, args...); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

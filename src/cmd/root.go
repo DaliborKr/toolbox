@@ -27,6 +27,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/containers/toolbox/pkg/architecture"
 	"github.com/containers/toolbox/pkg/nvidia"
 	"github.com/containers/toolbox/pkg/podman"
 	"github.com/containers/toolbox/pkg/utils"
@@ -374,12 +375,12 @@ func setUpGlobals() error {
 		return fmt.Errorf("failed to get the working directory: %w", err)
 	}
 
-	utils.HostArchID, err = utils.ParseArgArchValue(runtime.GOARCH)
+	architecture.HostArchID, err = architecture.ParseArgArchValue(runtime.GOARCH)
 	if err != nil {
 		return fmt.Errorf("failed to parse host architecture: %w", err)
 	}
 
-	logrus.Debugf("Host architecture: %s", utils.GetArchName(utils.HostArchID))
+	logrus.Debugf("Host architecture: %s", architecture.GetArchName(architecture.HostArchID))
 	return nil
 }
 

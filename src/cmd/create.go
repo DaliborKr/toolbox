@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"github.com/briandowns/spinner"
+	"github.com/containers/toolbox/pkg/architecture"
+	"github.com/containers/toolbox/pkg/binfmt_misc"
 	"github.com/containers/toolbox/pkg/podman"
 	"github.com/containers/toolbox/pkg/shell"
 	"github.com/containers/toolbox/pkg/skopeo"
@@ -184,13 +186,65 @@ func create(cmd *cobra.Command, args []string) error {
 
 	var archID int
 	if arch == "" {
-		archID = utils.HostArchID
+		archID = architecture.HostArchID
 	} else {
-		archIDParsed, err := utils.ParseArgArchValue(arch)
+		archIDParsed, err := architecture.ParseArgArchValue(arch)
 		if err != nil {
 			return err
 		}
 		archID = archIDParsed
+	}
+
+	// Validate architecture support for non-native architectures
+	if archID != architecture.HostArchID {
+		logrus.Debugf("Validating architecture support for %s", architecture.GetArchName(archID))
+
+		qemuSupported := false
+		var qemuErr error
+
+		// Check Go compilation support
+		// supportedArchs, goErr := architecture.GetGoSupportedArchitectures()
+		// if goErr != nil {
+		// 	logrus.Debugf("Failed to check Go architecture support: %s", goErr)
+		// } else {
+		// 	goSupported = supportedArchs[archID]
+		// }
+
+		// Check QEMU emulation support
+		qemuSupported, qemuErr = binfmt_misc.IsArchSupported(archID)
+		if qemuErr != nil {
+			logrus.Debugf("Failed to check QEMU architecture support: %s", qemuErr)
+		}
+
+		if !qemuSupported {
+			var builder strings.Builder
+			archName := architecture.GetArchName(archID)
+
+			fmt.Fprintf(&builder, "Error: Cannot create container for architecture %s\n\n", archName)
+			fmt.Fprintf(&builder, "The host system does not have the required support:\n")
+
+			if qemuErr != nil {
+				fmt.Fprintf(&builder, "QEMU emulation support: Could not verify (%s)\n", qemuErr)
+			} else if qemuSupported {
+				fmt.Fprintf(&builder, "QEMU emulation support: OK\n")
+			} else {
+				fmt.Fprintf(&builder, "QEMU emulation support: Missing\n")
+			}
+
+			// fmt.Fprintf(&builder, "\nTo enable cross-architecture support:\n")
+			// fmt.Fprintf(&builder, "  1. Install QEMU user-static:\n")
+			// fmt.Fprintf(&builder, "     • Fedora/RHEL: sudo dnf install qemu-user-static\n")
+			// fmt.Fprintf(&builder, "     • Ubuntu/Debian: sudo apt-get install qemu-user-static\n")
+			// fmt.Fprintf(&builder, "  2. Enable and start systemd-binfmt service:\n")
+			// fmt.Fprintf(&builder, "     sudo systemctl enable --now systemd-binfmt\n")
+			// fmt.Fprintf(&builder, "  3. Verify support:\n")
+			// fmt.Fprintf(&builder, "     cat /proc/sys/fs/binfmt_misc/qemu-%s\n", archName)
+			// fmt.Fprintf(&builder, "\nRun '%s --help' for more information.", executableBase)
+
+			return errors.New(builder.String())
+		}
+
+		logrus.Debugf("Architecture %s is supported", architecture.GetArchName(archID))
 	}
 
 	container, image, release, err := resolveContainerAndImageNames(container,
@@ -237,12 +291,20 @@ func createContainer(container, image, release, authFile string, archID int, sho
 		return errors.New(errMsg)
 	}
 
-	pulled, err := pullImage(image, release, authFile, archID)
+	// TODO: I have to make here some logic to recognize if user is not trying to already use for example
+	//		"registry.fedoraproject.org/fedora-toolbox:43-aarch64" which alredy has "-aarch64" in the image tag
+	//		and if so I should not add "-aarch64" to the image tag
+
+	pulled, nonnativeArch, err := pullImage(image, release, authFile, archID)
 	if err != nil {
 		return err
 	}
 	if !pulled {
 		return nil
+	}
+
+	if nonnativeArch {
+		image = image + "-" + architecture.GetArchName(archID)
 	}
 
 	imageFull, err := podman.GetFullyQualifiedImageFromRepoTags(image)
@@ -470,7 +532,7 @@ func createContainer(container, image, release, authFile string, archID int, sho
 	}...)
 
 	createArgs = append(createArgs, []string{
-		"--label", "toolbox-arch=" + utils.GetArchName(archID),
+		"--label", "toolbox-arch=" + architecture.GetArchName(archID),
 	}...)
 
 	createArgs = append(createArgs, devPtsMount...)
@@ -692,11 +754,13 @@ func getServiceSocket(serviceName string, unitName string) (string, error) {
 	return "", fmt.Errorf("failed to find a SOCK_STREAM socket for %s", unitName)
 }
 
-func pullImage(image, release, authFile string, archID int) (bool, error) {
+func pullImage(image, release, authFile string, archID int) (bool, bool, error) {
+	isNonNativeArch := archID != architecture.HostArchID
+
 	if ok := utils.ImageReferenceCanBeID(image); ok {
 		logrus.Debugf("Looking up image %s", image)
 		if _, err := podman.ImageExists(image); err == nil {
-			return true, nil
+			return true, false, nil
 		}
 	}
 
@@ -707,7 +771,7 @@ func pullImage(image, release, authFile string, archID int) (bool, error) {
 		logrus.Debugf("Looking up image %s", imageLocal)
 
 		if _, err := podman.ImageExists(imageLocal); err == nil {
-			return true, nil
+			return true, false, nil
 		}
 	}
 
@@ -719,13 +783,20 @@ func pullImage(image, release, authFile string, archID int) (bool, error) {
 		var err error
 		imageFull, err = utils.GetFullyQualifiedImageFromDistros(image, release)
 		if err != nil {
-			return false, fmt.Errorf("image %s not found in local storage and known registries", image)
+			return false, false, fmt.Errorf("image %s not found in local storage and known registries", image)
 		}
 	}
 
-	logrus.Debugf("Looking up image %s", imageFull)
-	if _, err := podman.ImageExists(imageFull); err == nil {
-		return true, nil
+	imageFullWithArch := ""
+	if isNonNativeArch {
+		imageFullWithArch = imageFull + "-" + architecture.GetArchName(archID)
+	} else {
+		imageFullWithArch = imageFull
+	}
+
+	logrus.Debugf("Looking up image %s", imageFullWithArch)
+	if _, err := podman.ImageExists(imageFullWithArch); err == nil {
+		return true, isNonNativeArch, nil
 	}
 
 	domain := utils.ImageReferenceGetDomain(imageFull)
@@ -750,14 +821,14 @@ func pullImage(image, release, authFile string, archID int) (bool, error) {
 			fmt.Fprintf(&builder, "Run '%s --help' for usage.", executableBase)
 
 			errMsg := builder.String()
-			return false, errors.New(errMsg)
+			return false, false, errors.New(errMsg)
 		}
 
 		shouldPullImage = showPromptForDownload(imageFull)
 	}
 
 	if !shouldPullImage {
-		return false, nil
+		return false, false, nil
 	}
 
 	logrus.Debugf("Pulling image %s", imageFull)
@@ -769,17 +840,23 @@ func pullImage(image, release, authFile string, archID int) (bool, error) {
 		defer s.Stop()
 	}
 
-	if err := podman.Pull(imageFull, authFile, archID); err != nil {
-		var builder strings.Builder
-		fmt.Fprintf(&builder, "failed to pull image %s\n", imageFull)
-		fmt.Fprintf(&builder, "If it was a private image, log in with: podman login %s\n", domain)
-		fmt.Fprintf(&builder, "Use '%s --verbose ...' for further details.", executableBase)
+	if archID == architecture.HostArchID {
+		if err := podman.Pull(imageFull, authFile); err != nil {
+			var builder strings.Builder
+			fmt.Fprintf(&builder, "failed to pull image %s\n", imageFull)
+			fmt.Fprintf(&builder, "If it was a private image, log in with: podman login %s\n", domain)
+			fmt.Fprintf(&builder, "Use '%s --verbose ...' for further details.", executableBase)
 
-		errMsg := builder.String()
-		return false, errors.New(errMsg)
+			errMsg := builder.String()
+			return false, false, errors.New(errMsg)
+		}
+	} else {
+		if err := skopeo.CopyOverrideArch(imageFull, archID); err != nil {
+			return false, false, fmt.Errorf("failed to copy image %s to %s: %w", imageFull, imageFullWithArch, err)
+		}
 	}
 
-	return true, nil
+	return true, isNonNativeArch, nil
 }
 
 func createPromptForDownload(imageFull, imageSize string) string {

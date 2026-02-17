@@ -74,30 +74,6 @@ const (
 	ContainerNameRegexp = "[a-zA-Z0-9][a-zA-Z0-9_.-]*"
 )
 
-const (
-	NotSpecifiedArchID = iota
-	ARM64ArchID
-	PPC64LEArchID
-	X86_64ArchID
-)
-
-var archNames = map[int]string{
-	NotSpecifiedArchID: "",
-	ARM64ArchID:        "arm64",
-	PPC64LEArchID:      "ppc64le",
-	X86_64ArchID:       "x86_64",
-}
-
-// TODO: Add support for other architectures
-//   - see command "go tool dist list"
-var supportedArgArchValues = map[string]int{
-	"arm64":   ARM64ArchID,
-	"aarch64": ARM64ArchID,
-	"ppc64le": PPC64LEArchID,
-	"x86_64":  X86_64ArchID,
-	"amd64":   X86_64ArchID,
-}
-
 var (
 	containerNamePrefixDefault string
 
@@ -195,8 +171,6 @@ var (
 
 var (
 	ContainerNameDefault string
-
-	HostArchID int
 
 	ErrContainerNameFromImageInvalid = errors.New("container name generated from image is invalid")
 
@@ -318,14 +292,6 @@ func ForwardToHost() (int, error) {
 	}
 
 	return exitCode, nil
-}
-
-func GetArchName(arch int) string {
-	if arch == NotSpecifiedArchID {
-		logrus.Warnf("Getting arch name for not specified architecture")
-		return archNames[arch]
-	}
-	return archNames[arch]
 }
 
 // GetCgroupsVersion returns the cgroups version of the host
@@ -696,15 +662,6 @@ func IsP11KitClientPresent() (bool, error) {
 	}
 
 	return false, err
-}
-
-func ParseArgArchValue(value string) (int, error) {
-	archID, exists := supportedArgArchValues[value]
-	if !exists {
-		return NotSpecifiedArchID, fmt.Errorf("architecture '%s' is not supported", value)
-	}
-
-	return archID, nil
 }
 
 func SetUpConfiguration() error {

@@ -30,6 +30,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/containers/toolbox/pkg/architecture"
 	"github.com/containers/toolbox/pkg/nvidia"
 	"github.com/containers/toolbox/pkg/podman"
 	"github.com/containers/toolbox/pkg/shell"
@@ -224,7 +225,7 @@ func runCommand(container string,
 
 			// TODO: What logic should be used to determine the arch?
 			// 		Temporarily using HostArchID to match existing behavior.
-			if err := createContainer(container, image, release, "", utils.HostArchID, false); err != nil {
+			if err := createContainer(container, image, release, "", architecture.HostArchID, false); err != nil {
 				return err
 			}
 		} else if containersCount == 1 && defaultContainer {

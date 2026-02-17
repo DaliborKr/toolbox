@@ -418,16 +418,12 @@ func LogsContext(ctx context.Context, container string, follow bool, since time.
 //
 // authfile is a path to a JSON authentication file and is internally used only
 // if it is not an empty string.
-func Pull(imageName string, authfile string, archID int) error {
+func Pull(imageName string, authfile string) error {
 	logLevelString := LogLevel.String()
 	args := []string{"--log-level", logLevelString, "pull"}
 
 	if authfile != "" {
 		args = append(args, []string{"--authfile", authfile}...)
-	}
-
-	if archID != utils.NotSpecifiedArchID {
-		args = append(args, []string{"--arch", utils.GetArchName(archID)}...)
 	}
 
 	args = append(args, imageName)

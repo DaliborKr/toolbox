@@ -28,6 +28,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/containers/toolbox/pkg/architecture"
 	"github.com/containers/toolbox/pkg/binfmt_misc"
 	"github.com/containers/toolbox/pkg/shell"
 	"github.com/containers/toolbox/pkg/utils"
@@ -89,7 +90,7 @@ func init() {
 
 	flags.IntVar(&initContainerFlags.archID,
 		"arch",
-		utils.HostArchID,
+		architecture.HostArchID,
 		"Create a Toolbx container for a different architecture than the host")
 
 	flags.IntVar(&initContainerFlags.gid,
@@ -255,18 +256,32 @@ func initContainer(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	//TODO: ??
-	if initContainerFlags.archID == utils.NotSpecifiedArchID {
-		return errors.New("architecture is not specified in the container")
-	}
+	//TODO: Probably dont want this check here, because correct archID should be set in the container create and
+	//		we want to keep this independent when --arch was not used on creation
+	// if initContainerFlags.archID == utils.NotSpecifiedArchID {
+	// 	return errors.New("architecture is not specified in the container")
+	// }
 
-	if initContainerFlags.archID != utils.HostArchID {
-		logrus.Debugf("Mounting binfmt_misc file system in container for architecture %s", utils.GetArchName(initContainerFlags.archID))
+	if initContainerFlags.archID != architecture.HostArchID {
+		archName := architecture.GetArchName(initContainerFlags.archID)
+		logrus.Debugf("Checking QEMU emulation support for architecture %s", archName)
+
+		supported, err := binfmt_misc.IsArchSupported(initContainerFlags.archID)
+		if err != nil {
+			logrus.Debugf("Failed to check QEMU architecture support: %s", err)
+		}
+
+		if !supported {
+			return fmt.Errorf("cannot initialize container: QEMU emulation support for architecture %s is not available on the host system\n"+
+				"Install qemu-user-static and enable systemd-binfmt service to support cross-architecture containers", archName)
+		}
+
+		logrus.Debugf("Mounting binfmt_misc file system in container for architecture %s", archName)
 		if err := binfmt_misc.MountBinfmtMisc(); err != nil {
 			return err
 		}
 
-		logrus.Debugf("Registering QEMU emulator for architecture %s in binfmt_mist", utils.GetArchName(initContainerFlags.archID))
+		logrus.Debugf("Registering QEMU emulator for architecture %s in binfmt_mist", archName)
 		if err := binfmt_misc.RegisterBinfmtMisc(initContainerFlags.archID); err != nil {
 			return err
 		}
