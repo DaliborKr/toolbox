@@ -266,15 +266,18 @@ func initContainer(cmd *cobra.Command, args []string) error {
 		archName := architecture.GetArchName(initContainerFlags.archID)
 		logrus.Debugf("Checking QEMU emulation support for architecture %s", archName)
 
-		supported, err := binfmt_misc.IsArchSupported(initContainerFlags.archID)
+		interpreterPath, err := architecture.IsArchSupported(initContainerFlags.archID, true)
 		if err != nil {
-			logrus.Debugf("Failed to check QEMU architecture support: %s", err)
+			errNotSupported := fmt.Errorf("Cannot run container for architecture %s\n%s", archName, err)
+			return errNotSupported
 		}
 
-		if !supported {
-			return fmt.Errorf("cannot initialize container: QEMU emulation support for architecture %s is not available on the host system\n"+
-				"Install qemu-user-static and enable systemd-binfmt service to support cross-architecture containers", archName)
-		}
+		logrus.Debugf("Architecture %s is supported", archName)
+
+		// if !supported {
+		// 	return fmt.Errorf("cannot initialize container: QEMU emulation support for architecture %s is not available on the host system\n"+
+		// 		"Install qemu-user-static and enable systemd-binfmt service to support cross-architecture containers", archName)
+		// }
 
 		logrus.Debugf("Mounting binfmt_misc file system in container for architecture %s", archName)
 		if err := binfmt_misc.MountBinfmtMisc(); err != nil {
@@ -282,7 +285,7 @@ func initContainer(cmd *cobra.Command, args []string) error {
 		}
 
 		logrus.Debugf("Registering QEMU emulator for architecture %s in binfmt_mist", archName)
-		if err := binfmt_misc.RegisterBinfmtMisc(initContainerFlags.archID); err != nil {
+		if err := binfmt_misc.RegisterBinfmtMisc(initContainerFlags.archID, interpreterPath); err != nil {
 			return err
 		}
 	}

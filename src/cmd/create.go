@@ -27,7 +27,6 @@ import (
 
 	"github.com/briandowns/spinner"
 	"github.com/containers/toolbox/pkg/architecture"
-	"github.com/containers/toolbox/pkg/binfmt_misc"
 	"github.com/containers/toolbox/pkg/podman"
 	"github.com/containers/toolbox/pkg/shell"
 	"github.com/containers/toolbox/pkg/skopeo"
@@ -195,56 +194,17 @@ func create(cmd *cobra.Command, args []string) error {
 		archID = archIDParsed
 	}
 
-	// Validate architecture support for non-native architectures
 	if archID != architecture.HostArchID {
-		logrus.Debugf("Validating architecture support for %s", architecture.GetArchName(archID))
+		archName := architecture.GetArchName(archID)
+		logrus.Debugf("Checking QEMU emulation support for architecture %s", archName)
 
-		qemuSupported := false
-		var qemuErr error
-
-		// Check Go compilation support
-		// supportedArchs, goErr := architecture.GetGoSupportedArchitectures()
-		// if goErr != nil {
-		// 	logrus.Debugf("Failed to check Go architecture support: %s", goErr)
-		// } else {
-		// 	goSupported = supportedArchs[archID]
-		// }
-
-		// Check QEMU emulation support
-		qemuSupported, qemuErr = binfmt_misc.IsArchSupported(archID)
-		if qemuErr != nil {
-			logrus.Debugf("Failed to check QEMU architecture support: %s", qemuErr)
+		_, err := architecture.IsArchSupported(archID, false)
+		if err != nil {
+			errNotSupported := fmt.Errorf("Cannot create container for architecture %s\n%s", archName, err)
+			return errNotSupported
 		}
 
-		if !qemuSupported {
-			var builder strings.Builder
-			archName := architecture.GetArchName(archID)
-
-			fmt.Fprintf(&builder, "Error: Cannot create container for architecture %s\n\n", archName)
-			fmt.Fprintf(&builder, "The host system does not have the required support:\n")
-
-			if qemuErr != nil {
-				fmt.Fprintf(&builder, "QEMU emulation support: Could not verify (%s)\n", qemuErr)
-			} else if qemuSupported {
-				fmt.Fprintf(&builder, "QEMU emulation support: OK\n")
-			} else {
-				fmt.Fprintf(&builder, "QEMU emulation support: Missing\n")
-			}
-
-			// fmt.Fprintf(&builder, "\nTo enable cross-architecture support:\n")
-			// fmt.Fprintf(&builder, "  1. Install QEMU user-static:\n")
-			// fmt.Fprintf(&builder, "     • Fedora/RHEL: sudo dnf install qemu-user-static\n")
-			// fmt.Fprintf(&builder, "     • Ubuntu/Debian: sudo apt-get install qemu-user-static\n")
-			// fmt.Fprintf(&builder, "  2. Enable and start systemd-binfmt service:\n")
-			// fmt.Fprintf(&builder, "     sudo systemctl enable --now systemd-binfmt\n")
-			// fmt.Fprintf(&builder, "  3. Verify support:\n")
-			// fmt.Fprintf(&builder, "     cat /proc/sys/fs/binfmt_misc/qemu-%s\n", archName)
-			// fmt.Fprintf(&builder, "\nRun '%s --help' for more information.", executableBase)
-
-			return errors.New(builder.String())
-		}
-
-		logrus.Debugf("Architecture %s is supported", architecture.GetArchName(archID))
+		logrus.Debugf("Architecture %s is supported", archName)
 	}
 
 	container, image, release, err := resolveContainerAndImageNames(container,
