@@ -54,11 +54,11 @@ func Inspect(ctx context.Context, target string) (*Image, error) {
 	return &image, nil
 }
 
-func CopyOverrideArch(source string, archID int) error {
+func CopyOverrideArch(source, sourceWithArch string, archID int) error {
 
-	destination := "containers-storage:" + source + "-" + architecture.GetArchName(archID)
+	destination := "containers-storage:" + sourceWithArch
 	sourceWithTransport := "docker://" + source
-	args := []string{"copy", "--override-arch", architecture.GetArchName(archID), sourceWithTransport, destination}
+	args := []string{"copy", "--override-arch", architecture.GetArchNameOCI(archID), sourceWithTransport, destination}
 
 	if logrus.GetLevel() < logrus.DebugLevel {
 		if err := shell.Run("skopeo", nil, nil, nil, args...); err != nil {

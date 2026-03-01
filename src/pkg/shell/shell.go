@@ -23,9 +23,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"syscall"
 
 	"github.com/sirupsen/logrus"
 )
+
+var ErrExecFormat = errors.New("executable format error")
 
 func Run(name string, stdin io.Reader, stdout, stderr io.Writer, arg ...string) error {
 	ctx := context.Background()
@@ -67,6 +70,10 @@ func RunContextWithExitCode(ctx context.Context,
 
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return 1, ctxErr
+		}
+
+		if errors.Is(err, syscall.ENOEXEC) {
+			return 1, fmt.Errorf("%s(1): %w", name, ErrExecFormat)
 		}
 
 		var exitErr *exec.ExitError

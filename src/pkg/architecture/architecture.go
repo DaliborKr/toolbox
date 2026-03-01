@@ -19,6 +19,7 @@ package architecture
 import (
 	"debug/elf"
 	"fmt"
+	"strings"
 
 	"github.com/containers/toolbox/pkg/utils"
 	"github.com/sirupsen/logrus"
@@ -43,11 +44,18 @@ var archELFMask = map[int][]byte{
 	X86_64ArchID:  {0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xfe, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0xff},
 }
 
-var archNames = map[int]string{
+var archNamesBinfmt = map[int]string{
 	NotSpecifiedArchID: "",
 	AARCH64ArchID:      "aarch64",
 	PPC64LEArchID:      "ppc64le",
 	X86_64ArchID:       "x86_64",
+}
+
+var archNamesOCI = map[int]string{
+	NotSpecifiedArchID: "",
+	AARCH64ArchID:      "arm64",
+	PPC64LEArchID:      "ppc64le",
+	X86_64ArchID:       "amd64",
 }
 
 var (
@@ -76,16 +84,49 @@ func GetArchELFMask(archID int) []byte {
 	return archELFMask[archID]
 }
 
-func GetArchName(arch int) string {
+func GetArchNameBinfmt(arch int) string {
 	if arch == NotSpecifiedArchID {
 		logrus.Warnf("Getting arch name for not specified architecture")
-		return archNames[arch]
+		return archNamesBinfmt[arch]
 	}
-	return archNames[arch]
+	return archNamesBinfmt[arch]
+}
+
+func GetArchNameOCI(arch int) string {
+	if arch == NotSpecifiedArchID {
+		logrus.Warnf("Getting arch name for not specified architecture")
+		return archNamesOCI[arch]
+	}
+	return archNamesOCI[arch]
+}
+
+func ImageReferenceGetArchFromTag(image string) int {
+	tag := utils.ImageReferenceGetTag(image)
+
+	if tag == "" {
+		return NotSpecifiedArchID
+	}
+
+	i := strings.LastIndexByte(tag, '-')
+	if i == -1 {
+		return NotSpecifiedArchID
+	}
+
+	archInTag := tag[i+1:]
+
+	for archID, archName := range archNamesBinfmt {
+		if archName == archInTag {
+			return archID
+		}
+	}
+
+	return NotSpecifiedArchID
 }
 
 func IsArchSupported(archID int, inContainer bool) (string, error) {
-	archName := GetArchName(archID)
+	archName := GetArchNameBinfmt(archID)
+	archNameDebug := GetArchNameOCI(archID)
+	logrus.Debugf("Checking QEMU emulation support for architecture %s", archNameDebug)
 
 	inContainerPathPrefix := ""
 
@@ -114,17 +155,18 @@ func IsArchSupported(archID int, inContainer bool) (string, error) {
 	}
 
 	if !qemuBinaryExists {
-		err := fmt.Errorf("The host system does not have the required support: No %s statically linked QEMU emulator binary found", archName)
+		err := fmt.Errorf("The host system does not have the required support: No %s statically linked QEMU emulator binary found in '/usr/bin/'", archNameDebug)
 		return "", err
 	}
 
 	for _, binfmtPath := range qemuBinfmtPossiblePaths {
 		if utils.PathExists(binfmtPath) {
+			logrus.Debugf("Architecture %s is supported", archName)
 			return foundInterpreterPath, nil
 		}
 	}
 
-	err := fmt.Errorf("The host system does not have the required support: No %s binfmt_misc registration found", archName)
+	err := fmt.Errorf("The host system does not have the required support: No %s binfmt_misc registration found", archNameDebug)
 	return "", err
 }
 

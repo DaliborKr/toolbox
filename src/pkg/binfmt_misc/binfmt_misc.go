@@ -141,8 +141,8 @@ func MountBinfmtMisc() error {
 func RegisterBinfmtMisc(archID int, interpreterPath string) error {
 	reg := getHardcodedRegistration(archID, interpreterPath)
 	if reg == nil {
-		logrus.Debugf("Could not find binfmt_misc registration for: %s", architecture.GetArchName(archID))
-		return fmt.Errorf("no hardcoded registration available for architecture %s", architecture.GetArchName(archID))
+		logrus.Debugf("Could not find binfmt_misc registration for: %s", architecture.GetArchNameOCI(archID))
+		return fmt.Errorf("no hardcoded registration available for architecture %s", architecture.GetArchNameOCI(archID))
 
 		// TODO: Fallback to parsing the values from the host registration file??
 		//			How to provide the path to the host registration file??
@@ -182,7 +182,7 @@ func getHardcodedRegistration(archID int, interpreterPath string) *Registration 
 func GetRegistration(archID int) (*Registration, error) {
 	defaultReg, exists := defaultRegistrations[archID]
 	if !exists {
-		return nil, fmt.Errorf("no information available for architecture %s", architecture.GetArchName(archID))
+		return nil, fmt.Errorf("no information available for architecture %s", architecture.GetArchNameOCI(archID))
 	}
 
 	name := defaultReg.Name

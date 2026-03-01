@@ -263,21 +263,17 @@ func initContainer(cmd *cobra.Command, args []string) error {
 	// }
 
 	if initContainerFlags.archID != architecture.HostArchID {
-		archName := architecture.GetArchName(initContainerFlags.archID)
-		logrus.Debugf("Checking QEMU emulation support for architecture %s", archName)
+		archName := architecture.GetArchNameOCI(initContainerFlags.archID)
+
+		if err := validateCrossArchEmulation(initContainerFlags.archID); err != nil {
+			return err
+		}
 
 		interpreterPath, err := architecture.IsArchSupported(initContainerFlags.archID, true)
 		if err != nil {
 			errNotSupported := fmt.Errorf("Cannot run container for architecture %s\n%s", archName, err)
 			return errNotSupported
 		}
-
-		logrus.Debugf("Architecture %s is supported", archName)
-
-		// if !supported {
-		// 	return fmt.Errorf("cannot initialize container: QEMU emulation support for architecture %s is not available on the host system\n"+
-		// 		"Install qemu-user-static and enable systemd-binfmt service to support cross-architecture containers", archName)
-		// }
 
 		logrus.Debugf("Mounting binfmt_misc file system in container for architecture %s", archName)
 		if err := binfmt_misc.MountBinfmtMisc(); err != nil {
@@ -1206,8 +1202,8 @@ func redirectPath(containerPath, target string, folder bool) error {
 // func registerBinfmtMisc(archID int) error {
 // 	reg := binfmt_misc.GetHardcodedRegistration(archID)
 // 	if reg == nil {
-// 		logrus.Debugf("Could not find binfmt_misc registration for: %s", utils.GetArchName(archID))
-// 		return fmt.Errorf("no hardcoded registration available for architecture %s", utils.GetArchName(archID))
+// 		logrus.Debugf("Could not find binfmt_misc registration for: %s", utils.GetArchNameOCI(archID))
+// 		return fmt.Errorf("no hardcoded registration available for architecture %s", utils.GetArchNameOCI(archID))
 
 // 		// TODO: Fallback to parsing the values from the host registration file??
 // 		//			How to provide the path to the host registration file??
@@ -1348,5 +1344,30 @@ func writeTimeZone(timeZone string) error {
 		return fmt.Errorf("failed to create new %s: %w", etcTimeZone, err)
 	}
 
+	return nil
+}
+
+func validateCrossArchEmulation(archID int) error {
+	archName := architecture.GetArchNameOCI(archID)
+	logrus.Debugf("Testing QEMU emulation for architecture %s", archName)
+
+	//TODO: Should I use /run/host/usr/bin/true as a testing command instead?
+	err := shell.Run("true", nil, nil, nil)
+
+	//exitCode, err := shell.RunContextWithExitCode(ctx, interpreterPath, nil, nil, nil, "--version")
+
+	if err != nil {
+		if errors.Is(err, shell.ErrExecFormat) {
+			return fmt.Errorf(
+				"QEMU emulation for architecture %s is not working\n"+
+					"Please verify that:\n"+
+					"  1. QEMU user-mode emulation is installed: qemu-user-static package\n"+
+					"  2. binfmt_misc is properly configured on the host system",
+				archName)
+		}
+		return fmt.Errorf("failed to test QEMU emulation for architecture %s: %w", archName, err)
+	}
+
+	logrus.Debugf("Test of QEMU emulation for architecture %s has succeeded", archName)
 	return nil
 }

@@ -631,6 +631,34 @@ func ImageReferenceHasDomain(image string) bool {
 	return true
 }
 
+func IsImageRefenceFedoraToolbox(image string) bool {
+	basename := ImageReferenceGetBasename(image)
+	if basename == "" {
+		return false
+	}
+
+	distroObj, ok := supportedDistros["fedora"]
+	if !ok {
+		return false
+	}
+
+	return basename == distroObj.ImageBasename
+}
+
+func IsSupportedDistroImage(image string) bool {
+	basename := ImageReferenceGetBasename(image)
+	if basename == "" {
+		return false
+	}
+
+	for _, distroObj := range supportedDistros {
+		if distroObj.ImageBasename == basename {
+			return true
+		}
+	}
+	return false
+}
+
 func IsP11KitClientPresent() (bool, error) {
 	var p11KitClientPaths []string
 	var supportedDistro bool

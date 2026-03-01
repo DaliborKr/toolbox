@@ -31,6 +31,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/containers/toolbox/pkg/architecture"
 	"github.com/containers/toolbox/pkg/utils"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
@@ -260,6 +261,18 @@ func discardInputAsync(ctx context.Context) (<-chan int, <-chan error) {
 	return retValCh, errCh
 }
 
+func createErrorConflictingArchSpecs(archCLI, archTag int) error {
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "conflicting architecture specifications\n")
+	fmt.Fprintf(&builder, "--arch=%s but image tag specifies %s\n",
+		architecture.GetArchNameOCI(archCLI),
+		architecture.GetArchNameOCI(archTag))
+	fmt.Fprintf(&builder, "Run '%s --help' for usage.", executableBase)
+
+	errMsg := builder.String()
+	return errors.New(errMsg)
+}
+
 func createErrorContainerNotFound(container string) error {
 	var builder strings.Builder
 	fmt.Fprintf(&builder, "container %s not found\n", container)
@@ -442,6 +455,56 @@ func poll(pollFn pollFunc, eventFD int32, fds ...int32) error {
 			return err
 		}
 	}
+}
+
+func resolveArchitectureID(arch string, image string) (int, error) {
+	// TODO: implement getting the default arch and vericatition of specified arch within the argument --arch
+	//		 Could be done with ```podman info --format '{{.Host.Arch}}'```
+
+	archID := architecture.NotSpecifiedArchID
+	if arch != "" {
+		archIDParsed, err := architecture.ParseArgArchValue(arch)
+		if err != nil {
+			return architecture.NotSpecifiedArchID, err
+		}
+		archID = archIDParsed
+	}
+
+	if image != "" && utils.IsImageRefenceFedoraToolbox(image) {
+		archIDFromTag := architecture.ImageReferenceGetArchFromTag(image)
+
+		if archID == architecture.NotSpecifiedArchID {
+			archID = archIDFromTag
+		} else if archID != archIDFromTag && archIDFromTag != architecture.NotSpecifiedArchID {
+			return architecture.NotSpecifiedArchID, createErrorConflictingArchSpecs(archID, archIDFromTag)
+		}
+	}
+
+	if archID == architecture.NotSpecifiedArchID {
+		archID = architecture.HostArchID
+	}
+
+	return archID, nil
+}
+
+func resolveImageNameWithArchitectureSuffix(image string, archID int) string {
+	isNonNativeArch := archID != architecture.HostArchID
+
+	if !isNonNativeArch {
+		return image
+	}
+
+	archIDFromTag := architecture.ImageReferenceGetArchFromTag(image)
+
+	if utils.IsImageRefenceFedoraToolbox(image) && archIDFromTag != architecture.NotSpecifiedArchID {
+		return image
+	}
+
+	if utils.IsSupportedDistroImage(image) {
+		return image + "-" + architecture.GetArchNameOCI(archID)
+	}
+
+	return image
 }
 
 func resolveContainerAndImageNames(container, containerArg, distroCLI, imageCLI, releaseCLI string) (

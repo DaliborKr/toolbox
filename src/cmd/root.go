@@ -380,7 +380,7 @@ func setUpGlobals() error {
 		return fmt.Errorf("failed to parse host architecture: %w", err)
 	}
 
-	logrus.Debugf("Host architecture: %s", architecture.GetArchName(architecture.HostArchID))
+	logrus.Debugf("Host architecture: %s", architecture.GetArchNameOCI(architecture.HostArchID))
 	return nil
 }
 

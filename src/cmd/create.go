@@ -178,33 +178,18 @@ func create(cmd *cobra.Command, args []string) error {
 		containerArg = "--container"
 	}
 
-	arch := createFlags.arch
-
-	// TODO: implement getting the default arch and vericatition of specified arch within the argument --arch
-	//		 Could be done with ```podman info --format '{{.Host.Arch}}'```
-
-	var archID int
-	if arch == "" {
-		archID = architecture.HostArchID
-	} else {
-		archIDParsed, err := architecture.ParseArgArchValue(arch)
-		if err != nil {
-			return err
-		}
-		archID = archIDParsed
+	archID, err := resolveArchitectureID(createFlags.arch, createFlags.image)
+	if err != nil {
+		return err
 	}
 
 	if archID != architecture.HostArchID {
-		archName := architecture.GetArchName(archID)
-		logrus.Debugf("Checking QEMU emulation support for architecture %s", archName)
-
+		archName := architecture.GetArchNameOCI(archID)
 		_, err := architecture.IsArchSupported(archID, false)
 		if err != nil {
 			errNotSupported := fmt.Errorf("Cannot create container for architecture %s\n%s", archName, err)
 			return errNotSupported
 		}
-
-		logrus.Debugf("Architecture %s is supported", archName)
 	}
 
 	container, image, release, err := resolveContainerAndImageNames(container,
@@ -255,7 +240,7 @@ func createContainer(container, image, release, authFile string, archID int, sho
 	//		"registry.fedoraproject.org/fedora-toolbox:43-aarch64" which alredy has "-aarch64" in the image tag
 	//		and if so I should not add "-aarch64" to the image tag
 
-	pulled, nonnativeArch, err := pullImage(image, release, authFile, archID)
+	pulled, CouldBeNonnativeArch, err := pullImage(image, release, authFile, archID)
 	if err != nil {
 		return err
 	}
@@ -263,8 +248,8 @@ func createContainer(container, image, release, authFile string, archID int, sho
 		return nil
 	}
 
-	if nonnativeArch {
-		image = image + "-" + architecture.GetArchName(archID)
+	if CouldBeNonnativeArch {
+		image = resolveImageNameWithArchitectureSuffix(image, archID)
 	}
 
 	imageFull, err := podman.GetFullyQualifiedImageFromRepoTags(image)
@@ -492,7 +477,7 @@ func createContainer(container, image, release, authFile string, archID int, sho
 	}...)
 
 	createArgs = append(createArgs, []string{
-		"--label", "toolbox-arch=" + architecture.GetArchName(archID),
+		"--label", "toolbox-arch=" + architecture.GetArchNameOCI(archID),
 	}...)
 
 	createArgs = append(createArgs, devPtsMount...)
@@ -747,12 +732,7 @@ func pullImage(image, release, authFile string, archID int) (bool, bool, error) 
 		}
 	}
 
-	imageFullWithArch := ""
-	if isNonNativeArch {
-		imageFullWithArch = imageFull + "-" + architecture.GetArchName(archID)
-	} else {
-		imageFullWithArch = imageFull
-	}
+	imageFullWithArch := resolveImageNameWithArchitectureSuffix(imageFull, archID)
 
 	logrus.Debugf("Looking up image %s", imageFullWithArch)
 	if _, err := podman.ImageExists(imageFullWithArch); err == nil {
@@ -811,7 +791,8 @@ func pullImage(image, release, authFile string, archID int) (bool, bool, error) 
 			return false, false, errors.New(errMsg)
 		}
 	} else {
-		if err := skopeo.CopyOverrideArch(imageFull, archID); err != nil {
+		// TODO: check the relevance of the 'authFile' for skopeo.CopyOverrideArch(), which is an argument in podman.Pull()
+		if err := skopeo.CopyOverrideArch(imageFull, imageFullWithArch, archID); err != nil {
 			return false, false, fmt.Errorf("failed to copy image %s to %s: %w", imageFull, imageFullWithArch, err)
 		}
 	}
