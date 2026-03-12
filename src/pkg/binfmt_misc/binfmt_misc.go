@@ -18,8 +18,6 @@ package binfmt_misc
 
 import (
 	"bytes"
-	"encoding/hex"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,7 +25,6 @@ import (
 
 	"github.com/containers/toolbox/pkg/architecture"
 	"github.com/containers/toolbox/pkg/shell"
-	"github.com/containers/toolbox/pkg/utils"
 	"github.com/sirupsen/logrus"
 )
 
@@ -43,41 +40,42 @@ type Registration struct {
 }
 
 const (
-	defaultOffset  = "0"
-	defaultFlags   = "FC"
-	binfmtMiscPath = "/proc/sys/fs/binfmt_misc"
+	deafultMagicType = "M"
+	defaultFlags     = "FC"
+	defaultOffset    = "0"
+	binfmtMiscPath   = "/proc/sys/fs/binfmt_misc"
 )
 
 // Add this at the package level in binfmt_misc.go (after imports, before functions)
-var defaultRegistrations = map[int]Registration{
-	architecture.AARCH64ArchID: {
-		Name:        "qemu-aarch64",
-		MagicType:   "M",
-		Offset:      defaultOffset,
-		Magic:       architecture.GetArchELFMagic(architecture.AARCH64ArchID),
-		Mask:        architecture.GetArchELFMask(architecture.AARCH64ArchID),
-		Interpreter: "",
-		Flags:       defaultFlags,
-	},
-	architecture.PPC64LEArchID: {
-		Name:        "qemu-ppc64le",
-		MagicType:   "M",
-		Offset:      defaultOffset,
-		Magic:       architecture.GetArchELFMagic(architecture.PPC64LEArchID),
-		Mask:        architecture.GetArchELFMask(architecture.PPC64LEArchID),
-		Interpreter: "",
-		Flags:       defaultFlags,
-	},
-	architecture.X86_64ArchID: {
-		Name:        "qemu-x86_64",
-		MagicType:   "M",
-		Offset:      defaultOffset,
-		Magic:       architecture.GetArchELFMagic(architecture.X86_64ArchID),
-		Mask:        architecture.GetArchELFMask(architecture.X86_64ArchID),
-		Interpreter: "",
-		Flags:       defaultFlags,
-	},
-}
+// var defaultRegistrations = map[int]Registration{
+// 	architecture.AARCH64ArchID: {
+// 		Name:        "qemu-aarch64",
+// 		MagicType:   deafultMagicType,
+// 		Offset:      defaultOffset,
+// 		Magic:       architecture.GetArchELFMagic(architecture.AARCH64ArchID),
+// 		Mask:        architecture.GetArchELFMask(architecture.AARCH64ArchID),
+// 		Interpreter: "",
+// 		Flags:       defaultFlags,
+// 	},
+// 	architecture.PPC64LEArchID: {
+// 		Name:        "qemu-ppc64le",
+// 		MagicType:   deafultMagicType,
+// 		Offset:      defaultOffset,
+// 		Magic:       architecture.GetArchELFMagic(architecture.PPC64LEArchID),
+// 		Mask:        architecture.GetArchELFMask(architecture.PPC64LEArchID),
+// 		Interpreter: "",
+// 		Flags:       defaultFlags,
+// 	},
+// 	architecture.X86_64ArchID: {
+// 		Name:        "qemu-x86_64",
+// 		MagicType:   deafultMagicType,
+// 		Offset:      defaultOffset,
+// 		Magic:       architecture.GetArchELFMagic(architecture.X86_64ArchID),
+// 		Mask:        architecture.GetArchELFMask(architecture.X86_64ArchID),
+// 		Interpreter: "",
+// 		Flags:       defaultFlags,
+// 	},
+// }
 
 func (r *Registration) register() error {
 	logrus.Debugf("Registering binfmt_misc for %s", r.Name)
@@ -97,11 +95,11 @@ func (r *Registration) register() error {
 	return nil
 }
 
-func (r *Registration) fixInterpreterPath() {
-	if !strings.HasPrefix(r.Interpreter, "/run/host/") {
-		r.Interpreter = filepath.Join("/run/host", r.Interpreter)
-	}
-}
+// func (r *Registration) fixInterpreterPath() {
+// 	if !strings.HasPrefix(r.Interpreter, "/run/host/") {
+// 		r.Interpreter = filepath.Join("/run/host", r.Interpreter)
+// 	}
+// }
 
 func (r *Registration) buildRegistrationString() string {
 	return fmt.Sprintf(":%s:%s:%s:%s:%s:%s:%s",
@@ -109,6 +107,51 @@ func (r *Registration) buildRegistrationString() string {
 		bytesToEscapedString(r.Magic),
 		bytesToEscapedString(r.Mask),
 		r.Interpreter, r.Flags)
+}
+
+func getDefaultRegistration(archID int, interpreterPath string) *Registration {
+	arch, exists := architecture.GetArchitecture(archID)
+	if !exists {
+		return nil
+	}
+
+	var name string
+	flags := defaultFlags
+	magicType := deafultMagicType
+	offset := defaultOffset
+
+	if arch.BinfmtName != "" {
+		name = arch.BinfmtName
+	} else {
+		name = "qemu-" + arch.NameBinfmt
+	}
+
+	if arch.BinfmtFlags != "" {
+		flags = arch.BinfmtFlags
+	}
+
+	if arch.BinfmtMagicType != "" {
+		flags = arch.BinfmtMagicType
+	}
+
+	if arch.BinfmtOffset != "" {
+		flags = arch.BinfmtOffset
+	}
+
+	interpreter := interpreterPath
+	if !strings.HasPrefix(interpreterPath, "/run/host/") {
+		interpreter = filepath.Join("/run/host", interpreter)
+	}
+
+	return &Registration{
+		Name:        name,
+		MagicType:   magicType,
+		Offset:      offset,
+		Magic:       arch.ELFMagic,
+		Mask:        arch.ELFMask,
+		Interpreter: interpreter,
+		Flags:       flags,
+	}
 }
 
 func bytesToEscapedString(bytes []byte) string {
@@ -139,10 +182,10 @@ func MountBinfmtMisc() error {
 }
 
 func RegisterBinfmtMisc(archID int, interpreterPath string) error {
-	reg := getHardcodedRegistration(archID, interpreterPath)
+	reg := getDefaultRegistration(archID, interpreterPath)
 	if reg == nil {
-		logrus.Debugf("Could not find binfmt_misc registration for: %s", architecture.GetArchNameOCI(archID))
-		return fmt.Errorf("no hardcoded registration available for architecture %s", architecture.GetArchNameOCI(archID))
+		logrus.Debugf("Unable to register binfmt_misc for architecture '%s'", architecture.GetArchNameOCI(archID))
+		return fmt.Errorf("Toolbx does not support architecture '%s'", architecture.GetArchNameOCI(archID))
 
 		// TODO: Fallback to parsing the values from the host registration file??
 		//			How to provide the path to the host registration file??
@@ -156,7 +199,7 @@ func RegisterBinfmtMisc(archID int, interpreterPath string) error {
 		// }
 	}
 
-	reg.fixInterpreterPath()
+	// reg.fixInterpreterPath()
 
 	if err := reg.register(); err != nil {
 		return err
@@ -165,48 +208,58 @@ func RegisterBinfmtMisc(archID int, interpreterPath string) error {
 	return nil
 }
 
-// TODO
-func getHardcodedRegistration(archID int, interpreterPath string) *Registration {
-	if reg, exists := defaultRegistrations[archID]; exists {
-		regCopy := reg // Create a copy to avoid returning pointer to map value
-		regCopy.Interpreter = interpreterPath
-		return &regCopy
-	}
-	// TODO: return an error instead of nil?
-	return nil
-}
+// func getHardcodedRegistration(archID int, interpreterPath string) *Registration {
+// 	if reg, exists := defaultRegistrations[archID]; exists {
+// 		regCopy := reg // Create a copy to avoid returning pointer to map value
+// 		regCopy.Interpreter = interpreterPath
+// 		return &regCopy
+// 	}
+// 	// TODO: return an error instead of nil?
+// 	return nil
+// }
 
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 // ---------------------- Parsing registration from binfmt_misc -------------------------
 
 // The path should be like "/run/host/proc/sys/fs/binfmt_misc/qemu-aarch64"
-func GetRegistration(archID int) (*Registration, error) {
-	defaultReg, exists := defaultRegistrations[archID]
-	if !exists {
-		return nil, fmt.Errorf("no information available for architecture %s", architecture.GetArchNameOCI(archID))
-	}
+// func GetRegistration(archID int) (*Registration, error) {
+// 	defaultReg, exists := defaultRegistrations[archID]
+// 	if !exists {
+// 		return nil, fmt.Errorf("no information available for architecture %s", architecture.GetArchNameOCI(archID))
+// 	}
 
-	name := defaultReg.Name
-	filePath := fmt.Sprintf("/run/host/proc/sys/fs/binfmt_misc/%s", name)
+// 	name := defaultReg.Name
+// 	filePath := fmt.Sprintf("/run/host/proc/sys/fs/binfmt_misc/%s", name)
 
-	logrus.Debugf("Reading binfmt_misc registration from %s", filePath)
+// 	logrus.Debugf("Reading binfmt_misc registration from %s", filePath)
 
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read %s: %w", filePath, err)
-	}
+// 	data, err := os.ReadFile(filePath)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to read %s: %w", filePath, err)
+// 	}
 
-	fields, err := parseBinfmtFields(string(data))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse %s: %w", filePath, err)
-	}
+// 	fields, err := parseBinfmtFields(string(data))
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to parse %s: %w", filePath, err)
+// 	}
 
-	reg, err := buildRegistrationFromFields(name, fields)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build registration from %s: %w", filePath, err)
-	}
+// 	reg, err := buildRegistrationFromFields(name, fields)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to build registration from %s: %w", filePath, err)
+// 	}
 
-	return reg, nil
-}
+// 	return reg, nil
+// }
 
 // func GetSupportedArchitectures() (map[int]bool, error) {
 // 	if !utils.PathExists(binfmtMiscPath) {
@@ -269,212 +322,212 @@ func GetRegistration(archID int) (*Registration, error) {
 // 	return supportedArchs, nil
 // }
 
-func IsArchSupported(archID int) (bool, error) {
-	if !utils.PathExists(binfmtMiscPath) {
-		err := fmt.Errorf("Error: binfmt_misc not available on this system. Path does not exist: %s", binfmtMiscPath)
-		return false, err
-	}
+// func IsArchSupported(archID int) (bool, error) {
+// 	if !utils.PathExists(binfmtMiscPath) {
+// 		err := fmt.Errorf("Error: binfmt_misc not available on this system. Path does not exist: %s", binfmtMiscPath)
+// 		return false, err
+// 	}
 
-	entries, err := os.ReadDir(binfmtMiscPath)
-	if err != nil {
-		err := fmt.Errorf("Error reading %s: %w\n", binfmtMiscPath, err)
-		return false, err
-	}
+// 	entries, err := os.ReadDir(binfmtMiscPath)
+// 	if err != nil {
+// 		err := fmt.Errorf("Error reading %s: %w\n", binfmtMiscPath, err)
+// 		return false, err
+// 	}
 
-	archIDSupported := false
+// 	archIDSupported := false
 
-	for _, entry := range entries {
-		name := entry.Name()
+// 	for _, entry := range entries {
+// 		name := entry.Name()
 
-		if name == "register" || name == "status" {
-			continue
-		}
+// 		if name == "register" || name == "status" {
+// 			continue
+// 		}
 
-		entryPath := filepath.Join(binfmtMiscPath, name)
+// 		entryPath := filepath.Join(binfmtMiscPath, name)
 
-		data, err := os.ReadFile(entryPath)
-		if err != nil {
-			logrus.Debugf("Error reading file '%s': %v\n", name, err)
-			continue
-		}
+// 		data, err := os.ReadFile(entryPath)
+// 		if err != nil {
+// 			logrus.Debugf("Error reading file '%s': %v\n", name, err)
+// 			continue
+// 		}
 
-		fields, err := parseBinfmtFields(string(data))
-		if err != nil {
-			logrus.Debugf("failed to parse %s: %v", entryPath, err)
-			continue
-		}
+// 		fields, err := parseBinfmtFields(string(data))
+// 		if err != nil {
+// 			logrus.Debugf("failed to parse %s: %v", entryPath, err)
+// 			continue
+// 		}
 
-		reg, err := buildRegistrationFromFields(name, fields)
-		if err != nil {
-			logrus.Debugf("failed to build registration from %s: %v", entryPath, err)
-			continue
-		}
+// 		reg, err := buildRegistrationFromFields(name, fields)
+// 		if err != nil {
+// 			logrus.Debugf("failed to build registration from %s: %v", entryPath, err)
+// 			continue
+// 		}
 
-		if !bytes.Equal(architecture.GetArchELFMagic(archID), reg.Magic) {
-			continue
-		}
+// 		if !bytes.Equal(architecture.GetArchELFMagic(archID), reg.Magic) {
+// 			continue
+// 		}
 
-		if reg.Status && strings.Contains(reg.Interpreter, "qemu") {
-			archIDSupported = true
-			break
-		}
-	}
+// 		if reg.Status && strings.Contains(reg.Interpreter, "qemu") {
+// 			archIDSupported = true
+// 			break
+// 		}
+// 	}
 
-	return archIDSupported, nil
-}
+// 	return archIDSupported, nil
+// }
 
-func parseBinfmtFields(content string) (map[string]string, error) {
-	fields := make(map[string]string)
-	lines := strings.Split(content, "\n")
+// func parseBinfmtFields(content string) (map[string]string, error) {
+// 	fields := make(map[string]string)
+// 	lines := strings.Split(content, "\n")
 
-	for lineNum, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
+// 	for lineNum, line := range lines {
+// 		line = strings.TrimSpace(line)
+// 		if line == "" {
+// 			continue
+// 		}
 
-		var key, value string
-		if line == "enabled" || line == "disabled" {
-			key = "status"
-			value = line
-		} else if strings.Contains(line, ":") {
-			// parsing format "flags: FC"
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) == 2 {
-				key = strings.TrimSpace(parts[0])
-				value = strings.TrimSpace(parts[1])
-			}
-		} else if strings.Contains(line, " ") {
-			// parsing format "interpreter /usr/bin/qemu-aarch64-static"
-			parts := strings.SplitN(line, " ", 2)
-			if len(parts) == 2 {
-				key = strings.TrimSpace(parts[0])
-				value = strings.TrimSpace(parts[1])
-			}
-		}
+// 		var key, value string
+// 		if line == "enabled" || line == "disabled" {
+// 			key = "status"
+// 			value = line
+// 		} else if strings.Contains(line, ":") {
+// 			// parsing format "flags: FC"
+// 			parts := strings.SplitN(line, ":", 2)
+// 			if len(parts) == 2 {
+// 				key = strings.TrimSpace(parts[0])
+// 				value = strings.TrimSpace(parts[1])
+// 			}
+// 		} else if strings.Contains(line, " ") {
+// 			// parsing format "interpreter /usr/bin/qemu-aarch64-static"
+// 			parts := strings.SplitN(line, " ", 2)
+// 			if len(parts) == 2 {
+// 				key = strings.TrimSpace(parts[0])
+// 				value = strings.TrimSpace(parts[1])
+// 			}
+// 		}
 
-		if key == "" {
-			return nil, fmt.Errorf("invalid field format on line %d: %s", lineNum+1, line)
-		}
+// 		if key == "" {
+// 			return nil, fmt.Errorf("invalid field format on line %d: %s", lineNum+1, line)
+// 		}
 
-		fields[key] = value
-	}
+// 		fields[key] = value
+// 	}
 
-	return fields, nil
-}
+// 	return fields, nil
+// }
 
-func buildRegistrationFromFields(name string, fields map[string]string) (*Registration, error) {
-	reg := &Registration{
-		Name: name,
-	}
+// func buildRegistrationFromFields(name string, fields map[string]string) (*Registration, error) {
+// 	reg := &Registration{
+// 		Name: name,
+// 	}
 
-	if status, exists := fields["status"]; exists && status == "enabled" {
-		reg.Status = true
-	} else {
-		reg.Status = false
-	}
+// 	if status, exists := fields["status"]; exists && status == "enabled" {
+// 		reg.Status = true
+// 	} else {
+// 		reg.Status = false
+// 	}
 
-	if err := validateAndSetInterpreter(reg, fields); err != nil {
-		return nil, err
-	}
+// 	if err := validateAndSetInterpreter(reg, fields); err != nil {
+// 		return nil, err
+// 	}
 
-	if _, exists := fields["magic"]; exists {
-		reg.MagicType = "M"
+// 	if _, exists := fields["magic"]; exists {
+// 		reg.MagicType = "M"
 
-		if err := validateAndSetMagic(reg, fields); err != nil {
-			return nil, err
-		}
+// 		if err := validateAndSetMagic(reg, fields); err != nil {
+// 			return nil, err
+// 		}
 
-		if err := validateAndSetMask(reg, fields); err != nil {
-			return nil, err
-		}
-		// } else if _, exists := fields["extension"]; exists {
-		// 	reg.MagicType = "E"
-		// 	if err := validateAndSetExtension(reg, fields); err != nil {
-		// 		return nil, err
-		// 	}
-	} else {
-		return nil, errors.New("missing required field: magic or extension")
-	}
+// 		if err := validateAndSetMask(reg, fields); err != nil {
+// 			return nil, err
+// 		}
+// 		// } else if _, exists := fields["extension"]; exists {
+// 		// 	reg.MagicType = "E"
+// 		// 	if err := validateAndSetExtension(reg, fields); err != nil {
+// 		// 		return nil, err
+// 		// 	}
+// 	} else {
+// 		return nil, errors.New("missing required field: magic or extension")
+// 	}
 
-	setOptionalFields(reg, fields)
+// 	setOptionalFields(reg, fields)
 
-	return reg, nil
-}
+// 	return reg, nil
+// }
 
-func validateAndSetInterpreter(reg *Registration, fields map[string]string) error {
-	interpreter, exists := fields["interpreter"]
-	if !exists {
-		return errors.New("missing required field: interpreter")
-	}
+// func validateAndSetInterpreter(reg *Registration, fields map[string]string) error {
+// 	interpreter, exists := fields["interpreter"]
+// 	if !exists {
+// 		return errors.New("missing required field: interpreter")
+// 	}
 
-	if interpreter == "" {
-		return errors.New("interpreter field is empty")
-	}
+// 	if interpreter == "" {
+// 		return errors.New("interpreter field is empty")
+// 	}
 
-	if !filepath.IsAbs(interpreter) {
-		return fmt.Errorf("interpreter must be an absolute path, got: %s", interpreter)
-	}
+// 	if !filepath.IsAbs(interpreter) {
+// 		return fmt.Errorf("interpreter must be an absolute path, got: %s", interpreter)
+// 	}
 
-	reg.Interpreter = interpreter
-	return nil
-}
+// 	reg.Interpreter = interpreter
+// 	return nil
+// }
 
-func validateAndSetMagic(reg *Registration, fields map[string]string) error {
-	magic, exists := fields["magic"]
-	if !exists {
-		return errors.New("missing required field: magic")
-	}
+// func validateAndSetMagic(reg *Registration, fields map[string]string) error {
+// 	magic, exists := fields["magic"]
+// 	if !exists {
+// 		return errors.New("missing required field: magic")
+// 	}
 
-	if magic == "" {
-		return errors.New("magic field is empty")
-	}
+// 	if magic == "" {
+// 		return errors.New("magic field is empty")
+// 	}
 
-	magicByte, err := hex.DecodeString(magic)
-	if err != nil {
-		return err
-	}
+// 	magicByte, err := hex.DecodeString(magic)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	reg.Magic = magicByte
-	return nil
-}
+// 	reg.Magic = magicByte
+// 	return nil
+// }
 
-func validateAndSetMask(reg *Registration, fields map[string]string) error {
-	mask, exists := fields["mask"]
-	if !exists {
-		return errors.New("missing required field: mask")
-	}
+// func validateAndSetMask(reg *Registration, fields map[string]string) error {
+// 	mask, exists := fields["mask"]
+// 	if !exists {
+// 		return errors.New("missing required field: mask")
+// 	}
 
-	if mask == "" {
-		return errors.New("mask field is empty")
-	}
+// 	if mask == "" {
+// 		return errors.New("mask field is empty")
+// 	}
 
-	maskByte, err := hex.DecodeString(mask)
-	if err != nil {
-		return err
-	}
+// 	maskByte, err := hex.DecodeString(mask)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	reg.Mask = maskByte
-	return nil
-}
+// 	reg.Mask = maskByte
+// 	return nil
+// }
 
-func setOptionalFields(reg *Registration, fields map[string]string) {
-	if offset, exists := fields["offset"]; exists && offset != "" {
-		reg.Offset = offset
-	} else {
-		reg.Offset = "0"
-	}
+// func setOptionalFields(reg *Registration, fields map[string]string) {
+// 	if offset, exists := fields["offset"]; exists && offset != "" {
+// 		reg.Offset = offset
+// 	} else {
+// 		reg.Offset = "0"
+// 	}
 
-	if flags, exists := fields["flags"]; exists && flags != "" {
-		if strings.Contains(flags, "C") {
-			reg.Flags = flags
-		} else {
-			reg.Flags = flags + "C"
-		}
-	} else {
-		reg.Flags = "FC"
-	}
-}
+// 	if flags, exists := fields["flags"]; exists && flags != "" {
+// 		if strings.Contains(flags, "C") {
+// 			reg.Flags = flags
+// 		} else {
+// 			reg.Flags = flags + "C"
+// 		}
+// 	} else {
+// 		reg.Flags = "FC"
+// 	}
+// }
 
 // func validateHexString(hexStr string) error {
 // 	cleaned := strings.ReplaceAll(hexStr, " ", "")

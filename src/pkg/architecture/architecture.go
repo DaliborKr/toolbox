@@ -25,6 +25,20 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type Architecture struct {
+	ID         int
+	NameBinfmt string
+	NameOCI    string
+	Aliases    []string
+	ELFMagic   []byte
+	ELFMask    []byte
+
+	BinfmtFlags     string
+	BinfmtName      string
+	BinfmtMagicType string
+	BinfmtOffset    string
+}
+
 const (
 	NotSpecifiedArchID = iota
 	AARCH64ArchID
@@ -32,72 +46,133 @@ const (
 	X86_64ArchID
 )
 
-var archELFMagic = map[int][]byte{
-	AARCH64ArchID: {0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0xb7, 0x00},
-	PPC64LEArchID: {0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x15, 0x00},
-	X86_64ArchID:  {0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x3e, 0x00},
+var supportedArchitectures = map[int]Architecture{
+	AARCH64ArchID: {
+		ID:         AARCH64ArchID,
+		NameBinfmt: "aarch64",
+		NameOCI:    "arm64",
+		Aliases:    []string{"aarch64", "arm64"},
+		ELFMagic:   []byte{0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0xb7, 0x00},
+		ELFMask:    []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0xff},
+	},
+	PPC64LEArchID: {
+		ID:         PPC64LEArchID,
+		NameBinfmt: "ppc64le",
+		NameOCI:    "ppc64le",
+		Aliases:    []string{"ppc64le"},
+		ELFMagic:   []byte{0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x15, 0x00},
+		ELFMask:    []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0x00},
+	},
+	X86_64ArchID: {
+		ID:         X86_64ArchID,
+		NameBinfmt: "x86_64",
+		NameOCI:    "amd64",
+		Aliases:    []string{"x86_64", "amd64"},
+		ELFMagic:   []byte{0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x3e, 0x00},
+		ELFMask:    []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xfe, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0xff},
+	},
 }
 
-var archELFMask = map[int][]byte{
-	AARCH64ArchID: {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0xff},
-	PPC64LEArchID: {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0x00},
-	X86_64ArchID:  {0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xfe, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0xff},
-}
+// var archELFMagic = map[int][]byte{
+// 	AARCH64ArchID: {0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0xb7, 0x00},
+// 	PPC64LEArchID: {0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x15, 0x00},
+// 	X86_64ArchID:  {0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x3e, 0x00},
+// }
 
-var archNamesBinfmt = map[int]string{
-	NotSpecifiedArchID: "",
-	AARCH64ArchID:      "aarch64",
-	PPC64LEArchID:      "ppc64le",
-	X86_64ArchID:       "x86_64",
-}
+// var archELFMask = map[int][]byte{
+// 	AARCH64ArchID: {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0xff},
+// 	PPC64LEArchID: {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0x00},
+// 	X86_64ArchID:  {0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xfe, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0xff},
+// }
 
-var archNamesOCI = map[int]string{
-	NotSpecifiedArchID: "",
-	AARCH64ArchID:      "arm64",
-	PPC64LEArchID:      "ppc64le",
-	X86_64ArchID:       "amd64",
-}
+// var archNamesBinfmt = map[int]string{
+// 	NotSpecifiedArchID: "",
+// 	AARCH64ArchID:      "aarch64",
+// 	PPC64LEArchID:      "ppc64le",
+// 	X86_64ArchID:       "x86_64",
+// }
+
+// var archNamesOCI = map[int]string{
+// 	NotSpecifiedArchID: "",
+// 	AARCH64ArchID:      "arm64",
+// 	PPC64LEArchID:      "ppc64le",
+// 	X86_64ArchID:       "amd64",
+// }
+
+// // TODO: Add support for other architectures
+// //   - see command "go tool dist list"
+// var supportedArgArchValues = map[string]int{
+// 	"arm64":   AARCH64ArchID,
+// 	"aarch64": AARCH64ArchID,
+// 	"ppc64le": PPC64LEArchID,
+// 	"x86_64":  X86_64ArchID,
+// 	"amd64":   X86_64ArchID,
+// }
 
 var (
-	HostArchID int
+	HostArchID             int
+	supportedArgArchValues map[string]int
 )
 
-// TODO: Add support for other architectures
-//   - see command "go tool dist list"
-var supportedArgArchValues = map[string]int{
-	"arm64":   AARCH64ArchID,
-	"aarch64": AARCH64ArchID,
-	"ppc64le": PPC64LEArchID,
-	"x86_64":  X86_64ArchID,
-	"amd64":   X86_64ArchID,
+func init() {
+	supportedArgArchValues = make(map[string]int)
+	for archID, arch := range supportedArchitectures {
+		for _, alias := range arch.Aliases {
+			supportedArgArchValues[alias] = archID
+		}
+	}
 }
 
+// Currently no refence
 func GetArchELFMagicAll() map[int][]byte {
-	return archELFMagic
+	result := make(map[int][]byte)
+	for archID, arch := range supportedArchitectures {
+		result[archID] = arch.ELFMagic
+	}
+	return result
 }
 
+// Currently no refence
 func GetArchELFMagic(archID int) []byte {
-	return archELFMagic[archID]
+	if arch, exists := supportedArchitectures[archID]; exists {
+		return arch.ELFMagic
+	}
+	return nil
 }
 
+// Currently no refence
 func GetArchELFMask(archID int) []byte {
-	return archELFMask[archID]
+	if arch, exists := supportedArchitectures[archID]; exists {
+		return arch.ELFMask
+	}
+	return nil
 }
 
 func GetArchNameBinfmt(arch int) string {
 	if arch == NotSpecifiedArchID {
 		logrus.Warnf("Getting arch name for not specified architecture")
-		return archNamesBinfmt[arch]
+		return ""
 	}
-	return archNamesBinfmt[arch]
+	if archObj, exists := supportedArchitectures[arch]; exists {
+		return archObj.NameBinfmt
+	}
+	return ""
 }
 
 func GetArchNameOCI(arch int) string {
 	if arch == NotSpecifiedArchID {
 		logrus.Warnf("Getting arch name for not specified architecture")
-		return archNamesOCI[arch]
+		return ""
 	}
-	return archNamesOCI[arch]
+	if archObj, exists := supportedArchitectures[arch]; exists {
+		return archObj.NameOCI
+	}
+	return ""
+}
+
+func GetArchitecture(archID int) (Architecture, bool) {
+	arch, exists := supportedArchitectures[archID]
+	return arch, exists
 }
 
 func ImageReferenceGetArchFromTag(image string) int {
@@ -114,8 +189,8 @@ func ImageReferenceGetArchFromTag(image string) int {
 
 	archInTag := tag[i+1:]
 
-	for archID, archName := range archNamesBinfmt {
-		if archName == archInTag {
+	for archID, arch := range supportedArchitectures {
+		if arch.NameBinfmt == archInTag {
 			return archID
 		}
 	}
@@ -147,7 +222,7 @@ func IsArchSupported(archID int, inContainer bool) (string, error) {
 	qemuBinaryExists := false
 	foundInterpreterPath := ""
 	for _, qemuPath := range qemuBinaryPossiblePaths {
-		if isStaticELF := IsStaticallyLinkedELF(qemuPath); isStaticELF {
+		if isStaticELF := isStaticallyLinkedELF(qemuPath); isStaticELF {
 			qemuBinaryExists = true
 			foundInterpreterPath = qemuPath
 			break
@@ -170,7 +245,7 @@ func IsArchSupported(archID int, inContainer bool) (string, error) {
 	return "", err
 }
 
-func IsStaticallyLinkedELF(filePath string) bool {
+func isStaticallyLinkedELF(filePath string) bool {
 	if !utils.PathExists(filePath) {
 		logrus.Debugf("File '%s' does not exist\n", filePath)
 		return false
