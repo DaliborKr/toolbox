@@ -178,18 +178,22 @@ func create(cmd *cobra.Command, args []string) error {
 		containerArg = "--container"
 	}
 
+	var archConfig architecture.Config
+
 	archID, err := resolveArchitectureID(createFlags.arch, createFlags.image)
 	if err != nil {
 		return err
 	}
+	archConfig.ID = archID
 
-	if archID != architecture.HostArchID {
-		archName := architecture.GetArchNameOCI(archID)
-		_, err := architecture.IsArchSupported(archID, false)
+	if archConfig.ID != architecture.HostArchID {
+		archName := architecture.GetArchNameOCI(archConfig.ID)
+		qemuEmulatorPath, err := architecture.IsArchSupportedOnCreation(archID)
 		if err != nil {
 			errNotSupported := fmt.Errorf("Cannot create container for architecture %s\n%s", archName, err)
 			return errNotSupported
 		}
+		archConfig.QemuEmulatorPath = qemuEmulatorPath
 	}
 
 	container, image, release, err := resolveContainerAndImageNames(container,
@@ -202,14 +206,14 @@ func create(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := createContainer(container, image, release, createFlags.authFile, archID, true); err != nil {
+	if err := createContainer(container, image, release, createFlags.authFile, archConfig, true); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func createContainer(container, image, release, authFile string, archID int, showCommandToEnter bool) error {
+func createContainer(container, image, release, authFile string, archConfig architecture.Config, showCommandToEnter bool) error {
 	if container == "" {
 		panic("container not specified")
 	}
@@ -240,7 +244,7 @@ func createContainer(container, image, release, authFile string, archID int, sho
 	//		"registry.fedoraproject.org/fedora-toolbox:43-aarch64" which alredy has "-aarch64" in the image tag
 	//		and if so I should not add "-aarch64" to the image tag
 
-	pulled, CouldBeNonnativeArch, err := pullImage(image, release, authFile, archID)
+	pulled, CouldBeNonnativeArch, err := pullImage(image, release, authFile, archConfig.ID)
 	if err != nil {
 		return err
 	}
@@ -249,7 +253,7 @@ func createContainer(container, image, release, authFile string, archID int, sho
 	}
 
 	if CouldBeNonnativeArch {
-		image = resolveImageNameWithArchitectureSuffix(image, archID)
+		image = resolveImageNameWithArchitectureSuffix(image, archConfig.ID)
 	}
 
 	imageFull, err := podman.GetFullyQualifiedImageFromRepoTags(image)
@@ -442,7 +446,8 @@ func createContainer(container, image, release, authFile string, archID int, sho
 	entryPoint := []string{
 		"toolbox", "--log-level", "debug",
 		"init-container",
-		"--arch", fmt.Sprintf("%d", archID),
+		"--arch", fmt.Sprintf("%d", archConfig.ID),
+		"--arch-emulator-path", archConfig.QemuEmulatorPath,
 		"--gid", currentUser.Gid,
 		"--home", currentUserHomeDir,
 		"--shell", userShell,
@@ -477,7 +482,7 @@ func createContainer(container, image, release, authFile string, archID int, sho
 	}...)
 
 	createArgs = append(createArgs, []string{
-		"--label", "toolbox-arch=" + architecture.GetArchNameOCI(archID),
+		"--label", "toolbox-arch=" + architecture.GetArchNameOCI(archConfig.ID),
 	}...)
 
 	createArgs = append(createArgs, devPtsMount...)

@@ -225,7 +225,8 @@ func runCommand(container string,
 
 			// TODO: What logic should be used to determine the arch?
 			// 		Temporarily using HostArchID to match existing behavior.
-			if err := createContainer(container, image, release, "", architecture.HostArchID, false); err != nil {
+
+			if err := createContainer(container, image, release, "", architecture.GetArchConfigDefault(), false); err != nil {
 				return err
 			}
 		} else if containersCount == 1 && defaultContainer {
@@ -961,6 +962,14 @@ func showEntryPointLog(line string) error {
 
 	if !logLevelFound {
 		errMsg, _ := strings.CutPrefix(line, "Error: ")
+
+		// Messages sent to stderr with a 'Warning:' prefix in the entry point
+		// are propagated to stderr on the host
+		if strings.HasPrefix(errMsg, "Warning:") {
+			fmt.Fprintf(os.Stderr, "%s\n", errMsg)
+			return nil
+		}
+
 		return &entryPointError{errMsg}
 	}
 
