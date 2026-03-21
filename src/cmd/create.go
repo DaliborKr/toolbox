@@ -186,7 +186,7 @@ func create(cmd *cobra.Command, args []string) error {
 	}
 	archConfig.ID = archID
 
-	if archConfig.ID != architecture.HostArchID {
+	if !architecture.HasContainerNativeArch(archConfig.ID) {
 		archName := architecture.GetArchNameOCI(archConfig.ID)
 		qemuEmulatorPath, err := architecture.IsArchSupportedOnCreation(archID)
 		if err != nil {
@@ -705,7 +705,7 @@ func getServiceSocket(serviceName string, unitName string) (string, error) {
 }
 
 func pullImage(image, release, authFile string, archID int) (bool, bool, error) {
-	isNonNativeArch := archID != architecture.HostArchID
+	isNonNativeArch := !architecture.HasContainerNativeArch(archID)
 
 	if ok := utils.ImageReferenceCanBeID(image); ok {
 		logrus.Debugf("Looking up image %s", image)
@@ -785,7 +785,8 @@ func pullImage(image, release, authFile string, archID int) (bool, bool, error) 
 		defer s.Stop()
 	}
 
-	if archID == architecture.HostArchID {
+	if !isNonNativeArch {
+		logrus.Debugf("'podman pull' is used for pulling image %s", imageFull)
 		if err := podman.Pull(imageFull, authFile); err != nil {
 			var builder strings.Builder
 			fmt.Fprintf(&builder, "failed to pull image %s\n", imageFull)
@@ -797,6 +798,7 @@ func pullImage(image, release, authFile string, archID int) (bool, bool, error) 
 		}
 	} else {
 		// TODO: check the relevance of the 'authFile' for skopeo.CopyOverrideArch(), which is an argument in podman.Pull()
+		logrus.Debugf("'skopeo copy' is used for pulling image %s", imageFull)
 		if err := skopeo.CopyOverrideArch(imageFull, imageFullWithArch, archID); err != nil {
 			return false, false, fmt.Errorf("failed to copy image %s to %s: %w", imageFull, imageFullWithArch, err)
 		}

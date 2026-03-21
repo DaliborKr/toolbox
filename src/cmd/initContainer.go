@@ -268,7 +268,7 @@ func initContainer(cmd *cobra.Command, args []string) error {
 	// 	return errors.New("architecture is not specified in the container")
 	// }
 
-	if initContainerFlags.archID != architecture.HostArchID {
+	if !architecture.HasContainerNativeArch(initContainerFlags.archID) {
 		archName := architecture.GetArchNameOCI(initContainerFlags.archID)
 		interpreterPath := "/run/host" + initContainerFlags.archInterp
 

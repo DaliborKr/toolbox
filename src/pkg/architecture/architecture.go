@@ -190,6 +190,10 @@ func GetArchitecture(archID int) (Architecture, bool) {
 	return arch, exists
 }
 
+func HasContainerNativeArch(archID int) bool {
+	return archID == HostArchID
+}
+
 func ImageReferenceGetArchFromTag(image string) int {
 	tag := utils.ImageReferenceGetTag(image)
 

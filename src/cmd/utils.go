@@ -488,9 +488,7 @@ func resolveArchitectureID(arch string, image string) (int, error) {
 }
 
 func resolveImageNameWithArchitectureSuffix(image string, archID int) string {
-	isNonNativeArch := archID != architecture.HostArchID
-
-	if !isNonNativeArch {
+	if architecture.HasContainerNativeArch(archID) {
 		return image
 	}
 
