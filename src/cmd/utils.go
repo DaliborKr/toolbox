@@ -505,9 +505,11 @@ func resolveImageNameWithArchitectureSuffix(image string, archID int) string {
 	return image
 }
 
-func resolveContainerAndImageNames(container, containerArg, distroCLI, imageCLI, releaseCLI string) (
+func resolveContainerAndImageNames(container, containerArg, distroCLI, imageCLI, releaseCLI string, archID int) (
 	string, string, string, error,
 ) {
+	containerWasEmpty := container == ""
+
 	container, image, release, err := utils.ResolveContainerAndImageNames(container,
 		distroCLI,
 		imageCLI,
@@ -559,6 +561,18 @@ func resolveContainerAndImageNames(container, containerArg, distroCLI, imageCLI,
 			return "", "", "", err
 		} else {
 			return "", "", "", err
+		}
+	}
+
+	if containerWasEmpty && !architecture.HasContainerNativeArch(archID) {
+		archIDFromTag := architecture.ImageReferenceGetArchFromTag(image)
+
+		// Only add suffix if architecture is not already present at the end of the tag
+		if archIDFromTag == architecture.NotSpecifiedArchID {
+			archName := architecture.GetArchNameOCI(archID)
+			if archName != "" {
+				container = container + "-" + archName
+			}
 		}
 	}
 

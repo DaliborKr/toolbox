@@ -200,7 +200,8 @@ func create(cmd *cobra.Command, args []string) error {
 		containerArg,
 		createFlags.distro,
 		createFlags.image,
-		createFlags.release)
+		createFlags.release,
+		archConfig.ID)
 
 	if err != nil {
 		return err
@@ -568,6 +569,15 @@ func createHelp(cmd *cobra.Command, args []string) {
 	}
 }
 
+func formatImagePullError(image, domain string) error {
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "failed to pull image %s\n", image)
+	fmt.Fprintf(&builder, "If it was a private image, log in with: podman login %s\n", domain)
+	fmt.Fprintf(&builder, "Use '%s --verbose ...' for further details.", executableBase)
+
+	return errors.New(builder.String())
+}
+
 func getDBusSystemSocket() (string, error) {
 	logrus.Debug("Resolving path to the D-Bus system socket")
 
@@ -787,20 +797,19 @@ func pullImage(image, release, authFile string, archID int) (bool, bool, error) 
 
 	if !isNonNativeArch {
 		logrus.Debugf("'podman pull' is used for pulling image %s", imageFull)
-		if err := podman.Pull(imageFull, authFile); err != nil {
-			var builder strings.Builder
-			fmt.Fprintf(&builder, "failed to pull image %s\n", imageFull)
-			fmt.Fprintf(&builder, "If it was a private image, log in with: podman login %s\n", domain)
-			fmt.Fprintf(&builder, "Use '%s --verbose ...' for further details.", executableBase)
 
-			errMsg := builder.String()
-			return false, false, errors.New(errMsg)
+		if err := podman.Pull(imageFull, authFile); err != nil {
+			return false, false, formatImagePullError(imageFull, domain)
 		}
 	} else {
-		// TODO: check the relevance of the 'authFile' for skopeo.CopyOverrideArch(), which is an argument in podman.Pull()
-		logrus.Debugf("'skopeo copy' is used for pulling image %s", imageFull)
-		if err := skopeo.CopyOverrideArch(imageFull, imageFullWithArch, archID); err != nil {
-			return false, false, fmt.Errorf("failed to copy image %s to %s: %w", imageFull, imageFullWithArch, err)
+		logrus.Debugf("'skopeo copy' is used for pulling non-native architecture image %s", imageFull)
+
+		if err := skopeo.VerifyArchitectureMatch(imageFull, archID, authFile); err != nil {
+			return false, false, err
+		}
+
+		if err := skopeo.CopyOverrideArch(imageFull, imageFullWithArch, archID, authFile); err != nil {
+			return false, false, formatImagePullError(imageFull, domain)
 		}
 	}
 

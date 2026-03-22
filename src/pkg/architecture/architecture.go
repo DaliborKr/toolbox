@@ -209,7 +209,7 @@ func ImageReferenceGetArchFromTag(image string) int {
 	archInTag := tag[i+1:]
 
 	for archID, arch := range supportedArchitectures {
-		if arch.NameBinfmt == archInTag {
+		if arch.NameBinfmt == archInTag || arch.NameOCI == archInTag {
 			return archID
 		}
 	}
@@ -322,7 +322,7 @@ func isStaticallyLinkedELF(filePath string) bool {
 func ParseArgArchValue(value string) (int, error) {
 	archID, exists := supportedArgArchValues[value]
 	if !exists {
-		return NotSpecifiedArchID, fmt.Errorf("architecture '%s' is not supported", value)
+		return NotSpecifiedArchID, fmt.Errorf("architecture '%s' is not supported by Toolbx", value)
 	}
 
 	return archID, nil
