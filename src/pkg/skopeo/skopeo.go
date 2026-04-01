@@ -20,12 +20,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"os"
 
 	"github.com/containers/toolbox/pkg/architecture"
 	"github.com/containers/toolbox/pkg/shell"
+	"github.com/docker/go-units"
 	"github.com/sirupsen/logrus"
 )
 
@@ -34,8 +36,56 @@ type Layer struct {
 }
 type Image struct {
 	Architecture string `json:"Architecture"`
-	Os           string `json:"Os"`
 	LayersData   []Layer
+	NameFull     string
+	Os           string `json:"Os"`
+}
+
+func (image *Image) GetSizeHuman() (string, error) {
+	imageSizeFloat, err := image.GetSize()
+	if err != nil {
+		return "", err
+	}
+
+	imageSizeHuman := units.HumanSize(imageSizeFloat)
+	return imageSizeHuman, nil
+}
+
+func (image *Image) GetSize() (float64, error) {
+	var imageSizeFloat float64
+
+	if image.LayersData == nil {
+		return -1, errors.New("'skopeo inspect' did not have LayersData")
+	}
+
+	for _, layer := range image.LayersData {
+		if layerSize, err := layer.Size.Float64(); err != nil {
+			return -1, err
+		} else {
+			imageSizeFloat += layerSize
+		}
+	}
+
+	return imageSizeFloat, nil
+}
+
+func (image *Image) VerifyArchitectureMatch(expectedArchID int) error {
+	expectedArchName := architecture.GetArchNameOCI(expectedArchID)
+	logrus.Debugf("Verifying image %s supports architecture %s", image.NameFull, expectedArchName)
+
+	actualArchID, err := architecture.ParseArgArchValue(image.Architecture)
+	if err != nil {
+		return err
+	}
+
+	if actualArchID != expectedArchID {
+		// Single-arch image mismatch
+		return fmt.Errorf("image %s is a single-architecture image for %s, but %s was requested",
+			image.NameFull, image.Architecture, expectedArchName)
+	}
+
+	logrus.Debugf("Architecture verification passed: %s", expectedArchName)
+	return nil
 }
 
 func CopyOverrideArch(source, destination string, archID int, authfile string) error {
@@ -63,11 +113,41 @@ func CopyOverrideArch(source, destination string, archID int, authfile string) e
 	return nil
 }
 
-func Inspect(ctx context.Context, target string) (*Image, error) {
+// func Inspect(ctx context.Context, target string) (*Image, error) {
+// 	var stdout bytes.Buffer
+
+// 	targetWithTransport := "docker://" + target
+// 	args := []string{"inspect", "--format", "json", targetWithTransport}
+
+// 	if err := shell.RunContext(ctx, "skopeo", nil, &stdout, nil, args...); err != nil {
+// 		return nil, err
+// 	}
+
+// 	output := stdout.Bytes()
+// 	var image Image
+// 	if err := json.Unmarshal(output, &image); err != nil {
+// 		return nil, err
+// 	}
+
+// 	return &image, nil
+// }
+
+func Inspect(ctx context.Context, target string, archID int, authfile string) (*Image, error) {
 	var stdout bytes.Buffer
 
 	targetWithTransport := "docker://" + target
-	args := []string{"inspect", "--format", "json", targetWithTransport}
+	args := []string{"inspect", "--format", "json"}
+
+	if !architecture.HasContainerNativeArch(archID) {
+		archName := architecture.GetArchNameOCI(archID)
+		args = append(args, []string{"--override-arch", archName}...)
+	}
+
+	if authfile != "" {
+		args = append(args, []string{"--authfile", authfile}...)
+	}
+
+	args = append(args, targetWithTransport)
 
 	if err := shell.RunContext(ctx, "skopeo", nil, &stdout, nil, args...); err != nil {
 		return nil, err
@@ -78,6 +158,8 @@ func Inspect(ctx context.Context, target string) (*Image, error) {
 	if err := json.Unmarshal(output, &image); err != nil {
 		return nil, err
 	}
+
+	image.NameFull = target
 
 	return &image, nil
 }
