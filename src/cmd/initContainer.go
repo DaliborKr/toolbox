@@ -1359,12 +1359,12 @@ func validateCrossArchEmulation(archID int) error {
 	logrus.Debugf("Testing QEMU emulation for architecture %s", archName)
 
 	//TODO: Should I use /run/host/usr/bin/true as a testing command instead?
-	err := shell.Run("true", nil, nil, nil)
+	_, err := shell.RunWithExitCodeErr("true", nil, nil, nil)
 
 	//exitCode, err := shell.RunContextWithExitCode(ctx, interpreterPath, nil, nil, nil, "--version")
 
 	if err != nil {
-		if errors.Is(err, shell.ErrExecFormat) {
+		if errors.Is(err, syscall.ENOEXEC) {
 			return fmt.Errorf(
 				"QEMU emulation for architecture %s is not working\n"+
 					"Please verify that:\n"+
