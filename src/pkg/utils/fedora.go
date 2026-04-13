@@ -17,7 +17,10 @@
 package utils
 
 import (
+	"strconv"
 	"strings"
+
+	"github.com/sirupsen/logrus"
 )
 
 func getDefaultReleaseFedora() (string, error) {
@@ -44,15 +47,15 @@ func parseReleaseFedora(release string) (string, error) {
 		release = release[1:]
 	}
 
-	// releaseN, err := strconv.Atoi(release)
-	// if err != nil {
-	// 	logrus.Debugf("Parsing release %s as an integer failed: %s", release, err)
-	// 	return "", &ParseReleaseError{"The release must be a positive integer."}
-	// }
+	releaseN, err := strconv.Atoi(release)
+	if err != nil {
+		logrus.Debugf("Parsing release %s as an integer failed: %s", release, err)
+		return "", &ParseReleaseError{"The release must be a positive integer."}
+	}
 
-	// if releaseN <= 0 {
-	// 	return "", &ParseReleaseError{"The release must be a positive integer."}
-	// }
+	if releaseN <= 0 {
+		return "", &ParseReleaseError{"The release must be a positive integer."}
+	}
 
 	return release, nil
 }

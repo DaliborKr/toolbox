@@ -458,8 +458,8 @@ func poll(pollFn pollFunc, eventFD int32, fds ...int32) error {
 }
 
 func resolveArchitectureID(arch string, image string) (int, error) {
-	// TODO: implement getting the default arch and vericatition of specified arch within the argument --arch
-	//		 Could be done with ```podman info --format '{{.Host.Arch}}'```
+	// TODO: Should I detect the image architecture even in other supported distros (not only in fedora-toolbox)
+	//		 since I have the local naming convention designed?
 
 	archID := architecture.NotSpecifiedArchID
 	if arch != "" {
@@ -470,10 +470,12 @@ func resolveArchitectureID(arch string, image string) (int, error) {
 		archID = archIDParsed
 	}
 
-	if image != "" && utils.IsImageRefenceFedoraToolbox(image) {
+	if image != "" && utils.IsSupportedDistroImage(image) {
 		archIDFromTag := architecture.ImageReferenceGetArchFromTag(image)
 
-		if archID == architecture.NotSpecifiedArchID {
+		if archID == architecture.NotSpecifiedArchID && archIDFromTag != architecture.NotSpecifiedArchID {
+			logrus.Debug("non-native architecture was detected in the image tag -> cross-architecture approach is going to be used")
+
 			archID = archIDFromTag
 		} else if archID != archIDFromTag && archIDFromTag != architecture.NotSpecifiedArchID {
 			return architecture.NotSpecifiedArchID, createErrorConflictingArchSpecs(archID, archIDFromTag)
@@ -493,12 +495,9 @@ func resolveImageNameWithArchitectureSuffix(image string, archID int) string {
 	}
 
 	archIDFromTag := architecture.ImageReferenceGetArchFromTag(image)
+	isSupportedDistroImage := utils.IsSupportedDistroImage(image)
 
-	if utils.IsImageRefenceFedoraToolbox(image) && archIDFromTag != architecture.NotSpecifiedArchID {
-		return image
-	}
-
-	if utils.IsSupportedDistroImage(image) {
+	if isSupportedDistroImage && archIDFromTag == architecture.NotSpecifiedArchID {
 		return image + "-" + architecture.GetArchNameOCI(archID)
 	}
 
