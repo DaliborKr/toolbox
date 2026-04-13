@@ -131,11 +131,11 @@ func getDefaultRegistration(archID int, interpreterPath string) *Registration {
 	}
 
 	if arch.BinfmtMagicType != "" {
-		flags = arch.BinfmtMagicType
+		magicType = arch.BinfmtMagicType
 	}
 
 	if arch.BinfmtOffset != "" {
-		flags = arch.BinfmtOffset
+		offset = arch.BinfmtOffset
 	}
 
 	interpreter := interpreterPath
