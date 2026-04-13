@@ -149,7 +149,7 @@ func Inspect(ctx context.Context, target string, archID int, authfile string) (*
 
 	args = append(args, targetWithTransport)
 
-	if err := shell.RunContext(ctx, "skopeo", nil, &stdout, nil, args...); err != nil {
+	if _, err := shell.RunContextWithExitCodeErr(ctx, "skopeo", nil, &stdout, nil, args...); err != nil {
 		return nil, err
 	}
 
