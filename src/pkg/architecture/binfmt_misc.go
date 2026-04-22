@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package binfmt_misc
+package architecture
 
 import (
 	"bytes"
@@ -23,7 +23,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/containers/toolbox/pkg/architecture"
 	"github.com/containers/toolbox/pkg/shell"
 	"github.com/sirupsen/logrus"
 )
@@ -48,30 +47,30 @@ const (
 
 // Add this at the package level in binfmt_misc.go (after imports, before functions)
 // var defaultRegistrations = map[int]Registration{
-// 	architecture.AARCH64: {
+// 	AARCH64: {
 // 		Name:        "qemu-aarch64",
 // 		MagicType:   deafultMagicType,
 // 		Offset:      defaultOffset,
-// 		Magic:       architecture.GetArchELFMagic(architecture.AARCH64),
-// 		Mask:        architecture.GetArchELFMask(architecture.AARCH64),
+// 		Magic:       GetArchELFMagic(AARCH64),
+// 		Mask:        GetArchELFMask(AARCH64),
 // 		Interpreter: "",
 // 		Flags:       defaultFlags,
 // 	},
-// 	architecture.PPC64LE: {
+// 	PPC64LE: {
 // 		Name:        "qemu-ppc64le",
 // 		MagicType:   deafultMagicType,
 // 		Offset:      defaultOffset,
-// 		Magic:       architecture.GetArchELFMagic(architecture.PPC64LE),
-// 		Mask:        architecture.GetArchELFMask(architecture.PPC64LE),
+// 		Magic:       GetArchELFMagic(PPC64LE),
+// 		Mask:        GetArchELFMask(PPC64LE),
 // 		Interpreter: "",
 // 		Flags:       defaultFlags,
 // 	},
-// 	architecture.X86_64: {
+// 	X86_64: {
 // 		Name:        "qemu-x86_64",
 // 		MagicType:   deafultMagicType,
 // 		Offset:      defaultOffset,
-// 		Magic:       architecture.GetArchELFMagic(architecture.X86_64),
-// 		Mask:        architecture.GetArchELFMask(architecture.X86_64),
+// 		Magic:       GetArchELFMagic(X86_64),
+// 		Mask:        GetArchELFMask(X86_64),
 // 		Interpreter: "",
 // 		Flags:       defaultFlags,
 // 	},
@@ -80,26 +79,14 @@ const (
 func (r *Registration) register() error {
 	logrus.Debugf("Registering binfmt_misc for %s", r.Name)
 
-	// if err := r.Validate(); err != nil {
-	// 	return fmt.Errorf("registration validation failed: %w", err)
-	// }
-
 	regString := r.buildRegistrationString()
 	logrus.Debugf("Registration string: %s", regString)
 
 	if err := os.WriteFile("/proc/sys/fs/binfmt_misc/register", []byte(regString), 0200); err != nil {
 		return fmt.Errorf("failed to register binfmt_misc handler: %w", err)
 	}
-
-	// return r.Verify()
 	return nil
 }
-
-// func (r *Registration) fixInterpreterPath() {
-// 	if !strings.HasPrefix(r.Interpreter, "/run/host/") {
-// 		r.Interpreter = filepath.Join("/run/host", r.Interpreter)
-// 	}
-// }
 
 func (r *Registration) buildRegistrationString() string {
 	return fmt.Sprintf(":%s:%s:%s:%s:%s:%s:%s",
@@ -110,7 +97,7 @@ func (r *Registration) buildRegistrationString() string {
 }
 
 func getDefaultRegistration(archID int, interpreterPath string) *Registration {
-	arch, exists := architecture.GetArchitecture(archID)
+	arch, exists := GetArchitecture(archID)
 	if !exists {
 		return nil
 	}
@@ -167,7 +154,7 @@ func MountBinfmtMisc() error {
 		"binfmt_misc",
 		"-t",
 		"binfmt_misc",
-		"/proc/sys/fs/binfmt_misc",
+		binfmtMiscPath,
 	}
 
 	var stdout bytes.Buffer
@@ -184,22 +171,9 @@ func MountBinfmtMisc() error {
 func RegisterBinfmtMisc(archID int, interpreterPath string) error {
 	reg := getDefaultRegistration(archID, interpreterPath)
 	if reg == nil {
-		logrus.Debugf("Unable to register binfmt_misc for architecture '%s'", architecture.GetArchNameOCI(archID))
-		return fmt.Errorf("Toolbx does not support architecture '%s'", architecture.GetArchNameOCI(archID))
-
-		// TODO: Fallback to parsing the values from the host registration file??
-		//			How to provide the path to the host registration file??
-
-		//logrus.Debug("Trying to read registration from the host file system as fallback")
-		//
-		// Fallback to parsing the values from the host registration file
-		// reg, err := binfmt_misc.GetRegistration(archID)
-		// if err != nil {
-		// 	return fmt.Errorf("no hardcoded registration available for architecture %s", arch)
-		// }
+		logrus.Debugf("Unable to register binfmt_misc for architecture '%s'", GetArchNameOCI(archID))
+		return fmt.Errorf("Toolbx does not support architecture '%s'", GetArchNameOCI(archID))
 	}
-
-	// reg.fixInterpreterPath()
 
 	if err := reg.register(); err != nil {
 		return err
@@ -235,7 +209,7 @@ func RegisterBinfmtMisc(archID int, interpreterPath string) error {
 // func GetRegistration(archID int) (*Registration, error) {
 // 	defaultReg, exists := defaultRegistrations[archID]
 // 	if !exists {
-// 		return nil, fmt.Errorf("no information available for architecture %s", architecture.GetArchNameOCI(archID))
+// 		return nil, fmt.Errorf("no information available for architecture %s", GetArchNameOCI(archID))
 // 	}
 
 // 	name := defaultReg.Name
@@ -302,15 +276,15 @@ func RegisterBinfmtMisc(archID int, interpreterPath string) error {
 // 			continue
 // 		}
 
-// 		matchedArchID := architecture.NOT_SPECIFIED
+// 		matchedArchID := NOT_SPECIFIED
 
-// 		for archID, magic := range architecture.GetArchELFMagicAll() {
+// 		for archID, magic := range GetArchELFMagicAll() {
 // 			if bytes.Equal(magic, reg.Magic) {
 // 				matchedArchID = archID
 // 			}
 // 		}
 
-// 		if matchedArchID == architecture.NOT_SPECIFIED {
+// 		if matchedArchID == NOT_SPECIFIED {
 // 			continue
 // 		}
 
@@ -363,7 +337,7 @@ func RegisterBinfmtMisc(archID int, interpreterPath string) error {
 // 			continue
 // 		}
 
-// 		if !bytes.Equal(architecture.GetArchELFMagic(archID), reg.Magic) {
+// 		if !bytes.Equal(GetArchELFMagic(archID), reg.Magic) {
 // 			continue
 // 		}
 

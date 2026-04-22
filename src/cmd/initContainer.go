@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/containers/toolbox/pkg/architecture"
-	"github.com/containers/toolbox/pkg/binfmt_misc"
 	"github.com/containers/toolbox/pkg/shell"
 	"github.com/containers/toolbox/pkg/utils"
 	"github.com/fsnotify/fsnotify"
@@ -277,7 +276,7 @@ func initContainer(cmd *cobra.Command, args []string) error {
 		}
 
 		logrus.Debugf("Mounting binfmt_misc file system in container for architecture %s", archName)
-		if err := binfmt_misc.MountBinfmtMisc(); err != nil {
+		if err := architecture.MountBinfmtMisc(); err != nil {
 			return err
 		}
 
@@ -288,7 +287,7 @@ func initContainer(cmd *cobra.Command, args []string) error {
 		}
 
 		logrus.Debugf("Registering QEMU emulator for architecture %s in binfmt_mist", archName)
-		if err := binfmt_misc.RegisterBinfmtMisc(initContainerFlags.archID, interpreterPath); err != nil {
+		if err := architecture.RegisterBinfmtMisc(initContainerFlags.archID, interpreterPath); err != nil {
 			return err
 		}
 	}
@@ -1207,7 +1206,7 @@ func redirectPath(containerPath, target string, folder bool) error {
 // }
 
 // func registerBinfmtMisc(archID int) error {
-// 	reg := binfmt_misc.GetHardcodedRegistration(archID)
+// 	reg := architecture.GetHardcodedRegistration(archID)
 // 	if reg == nil {
 // 		logrus.Debugf("Could not find binfmt_misc registration for: %s", utils.GetArchNameOCI(archID))
 // 		return fmt.Errorf("no hardcoded registration available for architecture %s", utils.GetArchNameOCI(archID))
@@ -1218,7 +1217,7 @@ func redirectPath(containerPath, target string, folder bool) error {
 // 		//logrus.Debug("Trying to read registration from the host file system as fallback")
 // 		//
 // 		// Fallback to parsing the values from the host registration file
-// 		// reg, err := binfmt_misc.GetRegistration(archID)
+// 		// reg, err := architecture.GetRegistration(archID)
 // 		// if err != nil {
 // 		// 	return fmt.Errorf("no hardcoded registration available for architecture %s", arch)
 // 		// }
