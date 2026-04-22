@@ -198,14 +198,14 @@ func GetContainers(args ...string) (*Containers, error) {
 // 	args := []string{"--log-level", logLevelString, "info", "--format", "{{.Host.Arch}}"}
 
 // 	if err := shell.Run("podman", nil, &stdout, nil, args...); err != nil {
-// 		return utils.NotSpecifiedArchID, err
+// 		return utils.NOT_SPECIFIED, err
 // 	}
 
 // 	arch := strings.TrimSpace(stdout.String())
 // 	logrus.Debugf("Host architecture: %s", arch)
 // 	archID, err := utils.ParseArgArchValue(arch)
 // 	if err != nil {
-// 		return utils.NotSpecifiedArchID, err
+// 		return utils.NOT_SPECIFIED, err
 // 	}
 
 // 	return archID, nil

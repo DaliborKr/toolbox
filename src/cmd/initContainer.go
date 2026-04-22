@@ -264,7 +264,7 @@ func initContainer(cmd *cobra.Command, args []string) error {
 
 	//TODO: Probably dont want this check here, because correct archID should be set in the container create and
 	//		we want to keep this independent when --arch was not used on creation
-	// if initContainerFlags.archID == utils.NotSpecifiedArchID {
+	// if initContainerFlags.archID == utils.NOT_SPECIFIED {
 	// 	return errors.New("architecture is not specified in the container")
 	// }
 
@@ -1359,7 +1359,7 @@ func validateCrossArchEmulation(archID int) error {
 	logrus.Debugf("Testing QEMU emulation for architecture %s", archName)
 
 	//TODO: Should I use /run/host/usr/bin/true as a testing command instead?
-	_, err := shell.RunWithExitCodeErr("true", nil, nil, nil)
+	_, err := shell.RunWithExitCode2("true", nil, nil, nil)
 
 	//exitCode, err := shell.RunContextWithExitCode(ctx, interpreterPath, nil, nil, nil, "--version")
 

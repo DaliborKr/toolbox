@@ -577,23 +577,6 @@ func createHelp(cmd *cobra.Command, args []string) {
 	}
 }
 
-func formatImagePullError(image, domain string) error {
-	var builder strings.Builder
-	fmt.Fprintf(&builder, "failed to pull image %s\n", image)
-	fmt.Fprintf(&builder, "If it was a private image, log in with: podman login %s\n", domain)
-	fmt.Fprintf(&builder, "Use '%s --verbose ...' for further details.", executableBase)
-
-	return errors.New(builder.String())
-}
-
-func formatSkopeoNotFoundError(imageFull string, archID int) error {
-	archName := architecture.GetArchNameOCI(archID)
-	return fmt.Errorf(
-		"Cannot inspect image %s for architecture %s: skopeo is not installed.\n"+
-			"Skopeo is required for creating non-native architecture containers.",
-		imageFull, archName)
-}
-
 func getDBusSystemSocket() (string, error) {
 	logrus.Debug("Resolving path to the D-Bus system socket")
 
@@ -830,7 +813,7 @@ func pullImage(image, release, authFile string, archID int) (bool, bool, error) 
 
 	if imageInspectErr != nil && isNonNativeArch {
 		if errors.Is(imageInspectErr, exec.ErrNotFound) {
-			return false, false, formatSkopeoNotFoundError(imageFull, archID)
+			return false, false, createErrorSkopeoNotFound(imageFull, archID)
 		}
 
 		// For now, log and continue (imageInfo will be nil)
@@ -846,7 +829,7 @@ func pullImage(image, release, authFile string, archID int) (bool, bool, error) 
 		logrus.Debugf("'podman pull' is used for pulling image %s", imageFull)
 
 		if err := podman.Pull(imageFull, authFile); err != nil {
-			return false, false, formatImagePullError(imageFull, domain)
+			return false, false, createErrorImagePull(imageFull, domain)
 		}
 	} else {
 		logrus.Debugf("'skopeo copy' is used for pulling non-native architecture image %s", imageFull)
@@ -863,7 +846,7 @@ func pullImage(image, release, authFile string, archID int) (bool, bool, error) 
 		}
 
 		if err := skopeo.CopyOverrideArch(imageFull, imageFullWithArch, archID, authFile); err != nil {
-			return false, false, formatImagePullError(imageFull, domain)
+			return false, false, createErrorImagePull(imageFull, domain)
 		}
 	}
 

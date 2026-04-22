@@ -149,7 +149,7 @@ func Inspect(ctx context.Context, target string, archID int, authfile string) (*
 
 	args = append(args, targetWithTransport)
 
-	if _, err := shell.RunContextWithExitCodeErr(ctx, "skopeo", nil, &stdout, nil, args...); err != nil {
+	if _, err := shell.RunContextWithExitCode2(ctx, "skopeo", nil, &stdout, nil, args...); err != nil {
 		return nil, err
 	}
 
@@ -164,54 +164,54 @@ func Inspect(ctx context.Context, target string, archID int, authfile string) (*
 	return &image, nil
 }
 
-func InspectWithOverrideArch(target string, archID int, authfile string) (*Image, error) {
-	var stdout bytes.Buffer
+// func InspectWithOverrideArch(target string, archID int, authfile string) (*Image, error) {
+// 	var stdout bytes.Buffer
 
-	archName := architecture.GetArchNameOCI(archID)
-	targetWithTransport := "docker://" + target
-	args := []string{"inspect", "--override-arch", archName, "--format", "json"}
+// 	archName := architecture.GetArchNameOCI(archID)
+// 	targetWithTransport := "docker://" + target
+// 	args := []string{"inspect", "--override-arch", archName, "--format", "json"}
 
-	if authfile != "" {
-		args = append(args, []string{"--authfile", authfile}...)
-	}
+// 	if authfile != "" {
+// 		args = append(args, []string{"--authfile", authfile}...)
+// 	}
 
-	args = append(args, targetWithTransport)
+// 	args = append(args, targetWithTransport)
 
-	if err := shell.Run("skopeo", nil, &stdout, nil, args...); err != nil {
-		return nil, err
-	}
+// 	if err := shell.Run("skopeo", nil, &stdout, nil, args...); err != nil {
+// 		return nil, err
+// 	}
 
-	output := stdout.Bytes()
-	var image Image
-	if err := json.Unmarshal(output, &image); err != nil {
-		return nil, err
-	}
+// 	output := stdout.Bytes()
+// 	var image Image
+// 	if err := json.Unmarshal(output, &image); err != nil {
+// 		return nil, err
+// 	}
 
-	return &image, nil
-}
+// 	return &image, nil
+// }
 
-func VerifyArchitectureMatch(imageTarget string, expectedArchID int, authfile string) error {
-	expectedArchName := architecture.GetArchNameOCI(expectedArchID)
-	logrus.Debugf("Verifying image %s supports architecture %s", imageTarget, expectedArchName)
+// func VerifyArchitectureMatch(imageTarget string, expectedArchID int, authfile string) error {
+// 	expectedArchName := architecture.GetArchNameOCI(expectedArchID)
+// 	logrus.Debugf("Verifying image %s supports architecture %s", imageTarget, expectedArchName)
 
-	image, err := InspectWithOverrideArch(imageTarget, expectedArchID, authfile)
-	if err != nil {
-		// Multi-arch image mismatch or other error related to the image inspection
-		return fmt.Errorf("failed to verify: image %s does not support architecture %s",
-			imageTarget, expectedArchName)
-	}
+// 	image, err := InspectWithOverrideArch(imageTarget, expectedArchID, authfile)
+// 	if err != nil {
+// 		// Multi-arch image mismatch or other error related to the image inspection
+// 		return fmt.Errorf("failed to verify: image %s does not support architecture %s",
+// 			imageTarget, expectedArchName)
+// 	}
 
-	actualArchID, err := architecture.ParseArgArchValue(image.Architecture)
-	if err != nil {
-		return err
-	}
+// 	actualArchID, err := architecture.ParseArgArchValue(image.Architecture)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	if actualArchID != expectedArchID {
-		// Single-arch image mismatch
-		return fmt.Errorf("image %s is a single-architecture image for %s, but %s was requested",
-			imageTarget, image.Architecture, expectedArchName)
-	}
+// 	if actualArchID != expectedArchID {
+// 		// Single-arch image mismatch
+// 		return fmt.Errorf("image %s is a single-architecture image for %s, but %s was requested",
+// 			imageTarget, image.Architecture, expectedArchName)
+// 	}
 
-	logrus.Debugf("Architecture verification passed: %s", expectedArchName)
-	return nil
-}
+// 	logrus.Debugf("Architecture verification passed: %s", expectedArchName)
+// 	return nil
+// }

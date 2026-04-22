@@ -293,6 +293,15 @@ func createErrorDistroWithoutRelease(distro string) error {
 	return errors.New(errMsg)
 }
 
+func createErrorImagePull(image, domain string) error {
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "failed to pull image %s\n", image)
+	fmt.Fprintf(&builder, "If it was a private image, log in with: podman login %s\n", domain)
+	fmt.Fprintf(&builder, "Use '%s --verbose ...' for further details.", executableBase)
+
+	return errors.New(builder.String())
+}
+
 func createErrorInvalidContainer(containerArg string) error {
 	var builder strings.Builder
 	fmt.Fprintf(&builder, "invalid argument for '%s'\n", containerArg)
@@ -355,6 +364,14 @@ func createErrorProfileDNotFound() error {
 
 	errMsg := builder.String()
 	return errors.New(errMsg)
+}
+
+func createErrorSkopeoNotFound(imageFull string, archID int) error {
+	archName := architecture.GetArchNameOCI(archID)
+	return fmt.Errorf(
+		"Cannot inspect image %s for architecture %s: skopeo is not installed.\n"+
+			"Skopeo is required for creating non-native architecture containers.",
+		imageFull, archName)
 }
 
 func createErrorSudoersDNotFound() error {
@@ -461,11 +478,11 @@ func resolveArchitectureID(arch string, image string) (int, error) {
 	// TODO: Should I detect the image architecture even in other supported distros (not only in fedora-toolbox)
 	//		 since I have the local naming convention designed?
 
-	archID := architecture.NotSpecifiedArchID
+	archID := architecture.NOT_SPECIFIED
 	if arch != "" {
 		archIDParsed, err := architecture.ParseArgArchValue(arch)
 		if err != nil {
-			return architecture.NotSpecifiedArchID, err
+			return architecture.NOT_SPECIFIED, err
 		}
 		archID = archIDParsed
 	}
@@ -473,16 +490,16 @@ func resolveArchitectureID(arch string, image string) (int, error) {
 	if image != "" && utils.IsSupportedDistroImage(image) {
 		archIDFromTag := architecture.ImageReferenceGetArchFromTag(image)
 
-		if archID == architecture.NotSpecifiedArchID && archIDFromTag != architecture.NotSpecifiedArchID {
+		if archID == architecture.NOT_SPECIFIED && archIDFromTag != architecture.NOT_SPECIFIED {
 			logrus.Debug("non-native architecture was detected in the image tag -> cross-architecture approach is going to be used")
 
 			archID = archIDFromTag
-		} else if archID != archIDFromTag && archIDFromTag != architecture.NotSpecifiedArchID {
-			return architecture.NotSpecifiedArchID, createErrorConflictingArchSpecs(archID, archIDFromTag)
+		} else if archID != archIDFromTag && archIDFromTag != architecture.NOT_SPECIFIED {
+			return architecture.NOT_SPECIFIED, createErrorConflictingArchSpecs(archID, archIDFromTag)
 		}
 	}
 
-	if archID == architecture.NotSpecifiedArchID {
+	if archID == architecture.NOT_SPECIFIED {
 		archID = architecture.HostArchID
 	}
 
@@ -497,7 +514,7 @@ func resolveImageNameWithArchitectureSuffix(image string, archID int) string {
 	archIDFromTag := architecture.ImageReferenceGetArchFromTag(image)
 	isSupportedDistroImage := utils.IsSupportedDistroImage(image)
 
-	if isSupportedDistroImage && archIDFromTag == architecture.NotSpecifiedArchID {
+	if isSupportedDistroImage && archIDFromTag == architecture.NOT_SPECIFIED {
 		return image + "-" + architecture.GetArchNameOCI(archID)
 	}
 
@@ -567,7 +584,7 @@ func resolveContainerAndImageNames(container, containerArg, distroCLI, imageCLI,
 		archIDFromTag := architecture.ImageReferenceGetArchFromTag(image)
 
 		// Only add suffix if architecture is not already present at the end of the tag
-		if archIDFromTag == architecture.NotSpecifiedArchID {
+		if archIDFromTag == architecture.NOT_SPECIFIED {
 			archName := architecture.GetArchNameOCI(archID)
 			if archName != "" {
 				container = container + "-" + archName

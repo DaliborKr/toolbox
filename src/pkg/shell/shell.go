@@ -23,12 +23,9 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"syscall"
 
 	"github.com/sirupsen/logrus"
 )
-
-var ErrExecFormat = errors.New("executable format error")
 
 func Run(name string, stdin io.Reader, stdout, stderr io.Writer, arg ...string) error {
 	ctx := context.Background()
@@ -72,10 +69,6 @@ func RunContextWithExitCode(ctx context.Context,
 			return 1, ctxErr
 		}
 
-		if errors.Is(err, syscall.ENOEXEC) {
-			return 1, fmt.Errorf("%s(1): %w", name, ErrExecFormat)
-		}
-
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			exitCode := exitErr.ExitCode()
@@ -94,7 +87,7 @@ func RunWithExitCode(name string, stdin io.Reader, stdout, stderr io.Writer, arg
 	return exitCode, err
 }
 
-func RunContextWithExitCodeErr(ctx context.Context,
+func RunContextWithExitCode2(ctx context.Context,
 	name string,
 	stdin io.Reader,
 	stdout, stderr io.Writer,
@@ -122,18 +115,18 @@ func RunContextWithExitCodeErr(ctx context.Context,
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			exitCode = exitErr.ExitCode()
-			return exitCode, fmt.Errorf("failed to invoke %s(1): %w", name, err)
+			return exitCode, err
 		}
 
 		// All other errors: preserve with %w wrapping
-		return exitCode, fmt.Errorf("failed to invoke %s(1): %w", name, err)
+		return exitCode, err
 	}
 
 	return 0, nil
 }
 
-func RunWithExitCodeErr(name string, stdin io.Reader, stdout, stderr io.Writer, arg ...string) (int, error) {
+func RunWithExitCode2(name string, stdin io.Reader, stdout, stderr io.Writer, arg ...string) (int, error) {
 	ctx := context.Background()
-	exitCode, err := RunContextWithExitCodeErr(ctx, name, stdin, stdout, stderr, arg...)
+	exitCode, err := RunContextWithExitCode2(ctx, name, stdin, stdout, stderr, arg...)
 	return exitCode, err
 }

@@ -48,30 +48,30 @@ const (
 
 // Add this at the package level in binfmt_misc.go (after imports, before functions)
 // var defaultRegistrations = map[int]Registration{
-// 	architecture.AARCH64ArchID: {
+// 	architecture.AARCH64: {
 // 		Name:        "qemu-aarch64",
 // 		MagicType:   deafultMagicType,
 // 		Offset:      defaultOffset,
-// 		Magic:       architecture.GetArchELFMagic(architecture.AARCH64ArchID),
-// 		Mask:        architecture.GetArchELFMask(architecture.AARCH64ArchID),
+// 		Magic:       architecture.GetArchELFMagic(architecture.AARCH64),
+// 		Mask:        architecture.GetArchELFMask(architecture.AARCH64),
 // 		Interpreter: "",
 // 		Flags:       defaultFlags,
 // 	},
-// 	architecture.PPC64LEArchID: {
+// 	architecture.PPC64LE: {
 // 		Name:        "qemu-ppc64le",
 // 		MagicType:   deafultMagicType,
 // 		Offset:      defaultOffset,
-// 		Magic:       architecture.GetArchELFMagic(architecture.PPC64LEArchID),
-// 		Mask:        architecture.GetArchELFMask(architecture.PPC64LEArchID),
+// 		Magic:       architecture.GetArchELFMagic(architecture.PPC64LE),
+// 		Mask:        architecture.GetArchELFMask(architecture.PPC64LE),
 // 		Interpreter: "",
 // 		Flags:       defaultFlags,
 // 	},
-// 	architecture.X86_64ArchID: {
+// 	architecture.X86_64: {
 // 		Name:        "qemu-x86_64",
 // 		MagicType:   deafultMagicType,
 // 		Offset:      defaultOffset,
-// 		Magic:       architecture.GetArchELFMagic(architecture.X86_64ArchID),
-// 		Mask:        architecture.GetArchELFMask(architecture.X86_64ArchID),
+// 		Magic:       architecture.GetArchELFMagic(architecture.X86_64),
+// 		Mask:        architecture.GetArchELFMask(architecture.X86_64),
 // 		Interpreter: "",
 // 		Flags:       defaultFlags,
 // 	},
@@ -302,7 +302,7 @@ func RegisterBinfmtMisc(archID int, interpreterPath string) error {
 // 			continue
 // 		}
 
-// 		matchedArchID := architecture.NotSpecifiedArchID
+// 		matchedArchID := architecture.NOT_SPECIFIED
 
 // 		for archID, magic := range architecture.GetArchELFMagicAll() {
 // 			if bytes.Equal(magic, reg.Magic) {
@@ -310,7 +310,7 @@ func RegisterBinfmtMisc(archID int, interpreterPath string) error {
 // 			}
 // 		}
 
-// 		if matchedArchID == architecture.NotSpecifiedArchID {
+// 		if matchedArchID == architecture.NOT_SPECIFIED {
 // 			continue
 // 		}
 
